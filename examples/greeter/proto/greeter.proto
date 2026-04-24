@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package greeter.v1;
+
+option go_package = "github.ibm.com/citius/zitadel-grpc-auth/examples/greeter/pb;greeterpb";
+
+// Greeter is a tiny example service used to demonstrate
+// zitadel-grpc-auth wiring. It has:
+//   - one public RPC (Healthz) that bypasses auth
+//   - one auth-only RPC (Hello) that requires a valid token
+//   - one policy-gated RPC (Admin) that requires a specific permission
+service Greeter {
+  rpc Healthz(HealthzRequest) returns (HealthzResponse);
+  rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc Admin(AdminRequest) returns (AdminResponse);
+}
+
+message HealthzRequest {}
+message HealthzResponse { string status = 1; }
+
+message HelloRequest { string name = 1; }
+message HelloResponse {
+  string message = 1;
+  // Echoed back from the server so clients can see what claims their
+  // token carried after introspection.
+  string subject = 2;
+}
+
+message AdminRequest { string action = 1; }
+message AdminResponse { string result = 1; }
