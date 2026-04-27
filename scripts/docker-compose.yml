@@ -1,0 +1,83 @@
+# Minimal Zitadel stack for zitadel-grpc-auth integration tests.
+#
+# This is intentionally simpler than the upstream production compose at
+# https://zitadel.com/docs/self-hosting/deploy/compose — no Traefik, no TLS,
+# Zitadel listens directly on :8080 in insecure mode. Suitable ONLY for
+# local tests / CI.
+#
+# `start-from-init` runs DB migrations + first-instance setup on first boot
+# and then keeps serving. The FIRSTINSTANCE_* vars provision an admin
+# machine user ("zitadel-admin-sa") and write its PAT to /pat/admin.pat
+# inside the container, which we mount to ./pat on the host so the
+# bootstrap script can pick it up.
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: zga-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: zitadel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    container_name: zga-zitadel
+    restart: unless-stopped
+    command:
+      - start-from-init
+      - --masterkey
+      - MasterkeyNeedsToHave32Characters
+      - --tlsMode
+      - disabled
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: db
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALDOMAIN: localhost
+      # Both the internal listen port (ZITADEL_PORT) and the externally
+      # advertised port (ZITADEL_EXTERNALPORT) MUST match — Zitadel uses
+      # EXTERNALPORT in issuer URLs and the SDK uses it to dial gRPC, so
+      # if the container actually listens on a different port the SDK
+      # gets "connection reset by peer". Override both via the
+      # ZITADEL_HOST_PORT env var when invoking docker compose.
+      ZITADEL_PORT: ${ZITADEL_HOST_PORT:-8080}
+      ZITADEL_EXTERNALPORT: ${ZITADEL_HOST_PORT:-8080}
+      ZITADEL_TLS_ENABLED: "false"
+      # First-instance bootstrap: provision an admin machine user + PAT
+      # and write it to a file we can read from the host.
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: zitadel-admin-sa
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_SCOPES: openid
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /pat/admin.pat
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${ZITADEL_HOST_PORT:-8080}:${ZITADEL_HOST_PORT:-8080}"
+    volumes:
+      - ./pat:/pat
+
+volumes:
+  pgdata:

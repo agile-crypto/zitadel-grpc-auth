@@ -1,0 +1,5 @@
+pat/
+.env
+generated-config.json
+zitadel-test.env
+setup-sdk/setup-sdk
