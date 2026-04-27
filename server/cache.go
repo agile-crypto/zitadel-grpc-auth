@@ -27,8 +27,9 @@ type cachedEntry struct {
 // upstream introspection call.
 //
 // The implementation deliberately keeps the dependency surface minimal: a
-// plain map under a sync.RWMutex with capped size + lazy expiry. For the
-// expected working-set sizes (≤10k entries) this is comfortably faster
+// plain map under a sync.Mutex with capped size + lazy expiry (the read
+// path also deletes expired entries, so an RWMutex would not be safe).
+// For the expected working-set sizes (≤10k entries) this is comfortably faster
 // than the round-trip to Zitadel that it elides, and avoids pulling in
 // hashicorp/golang-lru as a dependency. If profiling shows hot-spotting
 // here in the future, swapping the backing store for an expirable LRU is a

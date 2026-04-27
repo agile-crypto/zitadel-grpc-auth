@@ -110,34 +110,40 @@ func (w *wrappedStream) Context() context.Context { return w.ctx }
 // toGRPCStatus translates an internal/auth-domain error into a gRPC status
 // error. The mapping is:
 //
-//   - already a gRPC status                  → returned untouched
 //   - wraps auth.ErrUnauthenticated          → codes.Unauthenticated
 //   - wraps auth.ErrForbidden                → codes.PermissionDenied
-//   - anything else                          → codes.Internal
+//   - already a caller-facing gRPC status    → returned untouched
+//     (Unauthenticated, PermissionDenied, InvalidArgument, NotFound,
+//     FailedPrecondition, ResourceExhausted)
+//   - anything else                          → codes.Internal with a
+//     generic message (the original error is intentionally NOT surfaced
+//     to the client to avoid leaking server-side detail such as upstream
+//     hostnames, ports, or stack-shaped errors from the introspector).
 //
 // The Internal mapping is conservative: an unexpected error from an
 // introspector or policy is a server-side failure, not the client's fault.
-//
-// Note: for codes.Internal we currently surface err.Error() to the gRPC
-// client. This can leak server-side detail (e.g. "dial tcp 10.0.0.5: connect
-// refused"). Operators uncomfortable with that should wrap their introspector
-// to translate transport errors into auth.Unauthenticated, or fork this
-// helper. Logging the original error is a future hook (see MODULE_PLAN §10).
 func toGRPCStatus(err error) error {
 	if err == nil {
 		return nil
-	}
-	if _, ok := status.FromError(err); ok {
-		return err
 	}
 	switch {
 	case auth.IsUnauthenticated(err):
 		return status.Error(codes.Unauthenticated, err.Error())
 	case auth.IsForbidden(err):
 		return status.Error(codes.PermissionDenied, err.Error())
-	default:
-		return status.Error(codes.Internal, err.Error())
 	}
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case codes.Unauthenticated,
+			codes.PermissionDenied,
+			codes.InvalidArgument,
+			codes.NotFound,
+			codes.FailedPrecondition,
+			codes.ResourceExhausted:
+			return err
+		}
+	}
+	return status.Error(codes.Internal, "internal authorization error")
 }
 
 // noopUnary forwards every unary RPC untouched. Used in disabled mode.
