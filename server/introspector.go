@@ -17,10 +17,9 @@ import (
 // introspection endpoint at Issuer + "/oauth/v2/introspect" using HTTP
 // Basic auth with the API application's client_id and client_secret.
 //
-// The implementation deliberately uses net/http directly rather than the
-// Zitadel SDK introspection client: it keeps dependencies minimal, returns
-// the raw claims map without lossy projection, and is straightforward to
-// mock in tests via the Introspector interface.
+// The implementation is intentionally kept as an explicit opt-in fallback.
+// It remains useful when callers want full control over the http.Client or
+// want to avoid the SDK-backed default implementation.
 type httpIntrospector struct {
 	endpoint     string
 	clientID     string
@@ -28,16 +27,24 @@ type httpIntrospector struct {
 	http         *http.Client
 }
 
+// defaultHTTPTimeout bounds a single introspection round-trip when the
+// caller does not supply an http.Client of their own. It is intentionally
+// well below typical gRPC deadlines so that a stalled upstream cannot
+// pin an interceptor goroutine indefinitely.
+const defaultHTTPTimeout = 10 * time.Second
+
 // NewHTTPIntrospector returns the default introspector. The endpoint is
-// derived as issuer + "/oauth/v2/introspect". If httpClient is nil, the
-// default http.Client is used.
+// derived as issuer + "/oauth/v2/introspect". If httpClient is nil, an
+// http.Client with a bounded timeout is constructed; http.DefaultClient is
+// deliberately NOT used because it has no timeout and can wedge the
+// interceptor on a stalled upstream.
 //
 // This constructor is exported so callers can build the introspector
 // directly (e.g. to wrap it with metrics or logging) and pass it back
 // through [Config.Introspector].
 func NewHTTPIntrospector(issuer, clientID, clientSecret string, httpClient *http.Client) Introspector {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
 	}
 	return &httpIntrospector{
 		endpoint:     strings.TrimRight(issuer, "/") + "/oauth/v2/introspect",

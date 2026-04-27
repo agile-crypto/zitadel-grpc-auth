@@ -28,6 +28,15 @@ type fakeZitadel struct {
 func (f *fakeZitadel) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.calls.Add(1)
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 "http://" + r.Host,
+				"token_endpoint":         "http://" + r.Host + "/oauth/v2/token",
+				"introspection_endpoint": "http://" + r.Host + "/oauth/v2/introspect",
+			})
+			return
+		}
 		if r.URL.Path != "/oauth/v2/introspect" {
 			http.NotFound(w, r)
 			return
@@ -62,9 +71,9 @@ func TestServer_EndToEnd_WithRealIntrospector(t *testing.T) {
 		expectedSecret: "intro-secret",
 		responses: map[string]map[string]any{
 			"alice-tok": {
-				"active":                  true,
-				"sub":                     "alice",
-				"exp":                     float64(time.Now().Add(time.Hour).Unix()),
+				"active":                 true,
+				"sub":                    "alice",
+				"exp":                    float64(time.Now().Add(time.Hour).Unix()),
 				"urn:citius:permissions": []any{"citius:read"},
 			},
 			"bob-tok": {

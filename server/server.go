@@ -40,10 +40,9 @@ import (
 )
 
 // Introspector is the abstraction over the Zitadel introspection endpoint.
-// The default implementation ([NewHTTPIntrospector]) calls the OAuth2 token
-// introspection endpoint over HTTP. Tests and advanced deployments may
-// substitute their own implementation (e.g. wrapping a Zitadel SDK
-// authorizer, or stubbing in tests).
+// The default implementation ([NewSDKIntrospector]) uses the Zitadel Go SDK's
+// introspection verifier. Tests and advanced deployments may substitute their
+// own implementation (e.g. [NewHTTPIntrospector] or a test stub).
 type Introspector interface {
 	// Introspect validates the opaque bearer token and returns the
 	// claims plus the token's expiration time. If the token is not
@@ -93,7 +92,7 @@ type Config struct {
 	// custom TLS config). If nil, http.DefaultClient is used.
 	HTTPClient *http.Client
 
-	// Introspector overrides the default HTTP introspector. When set,
+	// Introspector overrides the default SDK-backed introspector. When set,
 	// Issuer, IntrospectionClientID, IntrospectionClientSecret, Insecure
 	// and HTTPClient are ignored. Useful for tests and for plugging in a
 	// Zitadel SDK-based authorizer.
@@ -220,7 +219,10 @@ func buildDefaultIntrospector(cfg Config) (Introspector, error) {
 	if !cfg.Insecure && !strings.HasPrefix(cfg.Issuer, "https://") {
 		return nil, errors.New("server.Config: Issuer must be https:// (or set Insecure=true for local dev)")
 	}
-	return NewHTTPIntrospector(cfg.Issuer, cfg.IntrospectionClientID, cfg.IntrospectionClientSecret, cfg.HTTPClient), nil
+	if cfg.HTTPClient != nil {
+		return NewHTTPIntrospector(cfg.Issuer, cfg.IntrospectionClientID, cfg.IntrospectionClientSecret, cfg.HTTPClient), nil
+	}
+	return NewSDKIntrospector(cfg.Issuer, cfg.IntrospectionClientID, cfg.IntrospectionClientSecret, cfg.Insecure)
 }
 
 func effectiveMaxEntries(cfg Config) int {
