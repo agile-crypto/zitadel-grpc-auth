@@ -5,6 +5,7 @@ authorization into gRPC services — with one switch to turn it off.
 
 ```go
 import (
+  "github.ibm.com/citius/zitadel-grpc-auth/admin"
     auth   "github.ibm.com/citius/zitadel-grpc-auth"
     "github.ibm.com/citius/zitadel-grpc-auth/client"
     "github.ibm.com/citius/zitadel-grpc-auth/server"
@@ -18,6 +19,8 @@ What it doesn't give you, and what this module does:
 
 - **gRPC unary + stream interceptors** (the SDK only ships `http.Handler`
   middleware).
+- **A small provisioning/admin layer** for bootstrapping Zitadel state and
+  onboarding machine users with the same SDK.
 - **An "auth off" mode** so the same call site works in dev, tests, and
   production.
 - **Introspection caching** with TTL + LRU + singleflight so a chatty service
@@ -32,6 +35,9 @@ It is **not** a general OIDC framework. It is opaque tokens against Zitadel
 introspection, for gRPC, with caching and policies. That's the whole scope.
 
 ## Quickstart — Server
+
+By default, the server now uses the Zitadel Go SDK introspection verifier.
+`NewHTTPIntrospector` remains available when you want an explicit HTTP fallback.
 
 ```go
 import (
@@ -94,6 +100,36 @@ func (s *citiusServer) Encrypt(ctx context.Context, req *pb.EncryptRequest) (*pb
     }
     // ... do the work
 }
+```
+
+## Quickstart — Admin
+
+```go
+ac, err := admin.NewClient(ctx, admin.Config{
+  Domain:      "localhost",
+  Port:        "8080",
+  Insecure:    true,
+  PAT:         os.Getenv("ZITADEL_ADMIN_PAT"),
+  Namespace:   "urn:citius",
+  ProjectName: "citius-api",
+})
+if err != nil { log.Fatal(err) }
+defer ac.Close()
+
+_, _ = ac.Bootstrap(ctx, admin.BootstrapInput{
+  ProjectName:    "citius-api",
+  ClaimNamespace: "urn:citius",
+  Operations: []admin.Operation{{
+    Method: "/citius.CitiusService/Encrypt", Permission: "citius:encrypt", DisplayName: "Encrypt",
+  }},
+})
+
+_, _ = ac.Onboard(ctx, admin.OnboardInput{
+  Username:    "svc-alice",
+  DisplayName: "Service Alice",
+  Permissions: []string{"citius:encrypt"},
+  KeyAccess: admin.KeyAccess{AllowedKeyPatterns: []string{"payments-*"}},
+})
 ```
 
 ## Quickstart — Client
@@ -203,10 +239,12 @@ No gRPC, no network, no Zitadel mocks needed.
 ├── errors.go        ErrUnauthenticated, ErrForbidden, helpers
 ├── policy.go        PolicyFunc, All, Any, AuthorizeGlobPattern
 ├── redact.go        RedactToken (safe-for-logging)
+├── admin/           Zitadel bootstrap + onboarding helpers
 ├── client/          gRPC dial-side adapter
 ├── server/          gRPC server-side adapter
 │   ├── server.go    Config, New
-│   ├── introspector.go  HTTP introspector + interface
+│   ├── introspector.go  HTTP fallback introspector + interface
+│   ├── introspector_sdk.go SDK-backed default introspector
 │   ├── interceptor.go   unary + stream + decision flow
 │   └── cache.go     TTL + size-bounded + singleflight
 └── internal/bearer/ Bearer header parsing
