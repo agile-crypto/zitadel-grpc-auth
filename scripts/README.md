@@ -12,8 +12,8 @@ ready for the [zitadel-grpc-auth](../README.md) integration tests and the
 |---|---|
 | [docker-compose.yml](docker-compose.yml) | Minimal Zitadel + Postgres stack (no Traefik, no TLS, port 8080) |
 | [bootstrap-zitadel.sh](bootstrap-zitadel.sh) | up / down / reset orchestrator |
-| [setup-sdk/main.go](setup-sdk/main.go) | Go provisioning client (uses zitadel-go/v3 SDK) |
-| [setup-sdk/go.mod](setup-sdk/go.mod) | Separate module so the SDK deps don't bleed into the parent module |
+| [setup-sdk/main.go](setup-sdk/main.go) | Thin Go wrapper over [`admin.Bootstrap`](../admin/bootstrap.go) + [`admin.Onboard`](../admin/onboard.go) |
+| [setup-sdk/go.mod](setup-sdk/go.mod) | Separate module, depends on the parent via a relative `replace` (so script-only deps like godotenv stay isolated) |
 | `pat/admin.pat` (generated) | First-instance admin PAT, auto-provisioned by Zitadel on first boot |
 | `.env` (generated) | PAT + endpoint vars consumed by [setup-sdk/main.go](setup-sdk/main.go) |
 | `generated-config.json` (generated) | Full provisioning result (project_id, api_app, users, action_id) |
@@ -82,12 +82,16 @@ zitadel-grpc-auth tests and the greeter example expect:
   - `alice` — `greeter:user`
   - `root`  — `greeter:user` + `greeter:admin`
   - `bob`   — no roles (negative-path tests)
-- **Pre-userinfo action** `injectGreeterClaims` — copies the user's
-  `greeter:*` project-role grants into the custom claim
-  `urn:greeter:roles`, which the example's admin policy reads via
-  `claims.HasStringInSlice("urn:greeter:roles", "greeter:admin")`. Wired to
-  flow `2` (token customisation) trigger `4` (pre userinfo creation), which
-  also fires for introspection.
+- **Pre-userinfo action** (auto-named `injectUrnGreeterClaims`) — generated
+  by [`admin.RenderActionScript`](../admin/action.go); copies the user's
+  project-role grants into the custom claim `urn:greeter:permissions`,
+  which the example's admin policy reads via
+  `claims.HasStringInSlice("urn:greeter:permissions", "greeter:admin")`.
+  Wired to flow `2` (token customisation) trigger `4` (pre userinfo
+  creation) — the same trigger fires on introspection. The action also
+  emits the `*_key_patterns` / `*_policy_patterns` claims (currently
+  unused by the greeter example) so operators can experiment with the
+  resource-scoping helpers without re-bootstrapping.
 
 The resulting [generated-config.json](generated-config.json) is sliced into
 [zitadel-test.env](zitadel-test.env) so tests and examples can pick up:
@@ -145,8 +149,14 @@ kill $SERVER_PID
 - **"PAT was not written within 120s"** — `docker compose -p zga logs zitadel`
   and look for migration errors. If the volume contains an old database from
   a previous run, do a `reset`.
-- **`setup-sdk` fails with "AlreadyExists"** — Zitadel state from a previous
-  run is still around. Run `./bootstrap-zitadel.sh reset`.
+- **`setup-sdk` fails with a non-`AlreadyExists` Zitadel error** — the
+  `admin` package is idempotent for project/role/action/user creation,
+  so re-runs against the same instance are safe; if you hit a hard
+  failure, capture the log and run `./bootstrap-zitadel.sh reset` for a
+  clean slate.
+- **Empty `*_CLIENT_SECRET` after a re-run** — Zitadel only surfaces the
+  machine-user secret on first creation. `admin.Onboard` warns when this
+  happens; do a `reset` if you need the secrets surfaced again.
 - **Port 8080 already in use** — change the host-side port in
   [docker-compose.yml](docker-compose.yml) and update `ZITADEL_EXTERNALPORT`
   + `ZITADEL_ISSUER` accordingly.
