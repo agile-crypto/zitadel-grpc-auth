@@ -105,8 +105,8 @@ func ctxWithToken(parent context.Context, token string) context.Context {
 }
 
 func adminPolicy(_ context.Context, _ string, c *auth.Claims) error {
-	if !c.HasStringInSlice("urn:greeter:roles", "greeter:admin") {
-		return auth.Forbidden("missing role greeter:admin")
+	if !c.HasStringInSlice("urn:greeter:permissions", "greeter:admin") {
+		return auth.Forbidden("missing permission greeter:admin")
 	}
 	return nil
 }
@@ -116,11 +116,11 @@ func TestGreeter_AuthEnabled_PolicyMatrix(t *testing.T) {
 	intr := &fakeIntrospector{tokens: map[string]map[string]any{
 		"alice-tok": {
 			"active": true, "sub": "alice", "exp": float64(now),
-			"urn:greeter:roles": []any{"greeter:user"},
+			"urn:greeter:permissions": []any{"greeter:user"},
 		},
 		"admin-tok": {
 			"active": true, "sub": "root", "exp": float64(now),
-			"urn:greeter:roles": []any{"greeter:user", "greeter:admin"},
+			"urn:greeter:permissions": []any{"greeter:user", "greeter:admin"},
 		},
 	}}
 

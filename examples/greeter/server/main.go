@@ -3,7 +3,12 @@
 //
 //	Healthz : public, bypasses auth
 //	Hello   : authenticated only (any valid token)
-//	Admin   : requires the "greeter:admin" claim under "urn:greeter:roles"
+//	Admin   : requires the "greeter:admin" permission under "urn:greeter:permissions"
+//
+// The custom claim is produced by the Pre-Userinfo action that
+// `admin.Bootstrap` (used by scripts/setup-sdk) wires into Zitadel — it
+// flattens the user's project-role grants into a deduplicated string
+// array under "<namespace>:permissions" (here `urn:greeter:permissions`).
 //
 // Run it with auth disabled (no Zitadel needed):
 //
@@ -54,8 +59,8 @@ func main() {
 	cfg := loadConfigFromEnv()
 
 	requireAdmin := func(_ context.Context, _ string, c *auth.Claims) error {
-		if !c.HasStringInSlice("urn:greeter:roles", "greeter:admin") {
-			return auth.Forbidden("missing role greeter:admin")
+		if !c.HasStringInSlice("urn:greeter:permissions", "greeter:admin") {
+			return auth.Forbidden("missing permission greeter:admin")
 		}
 		return nil
 	}

@@ -7,7 +7,7 @@ real gRPC service with three representative RPCs:
 | --------- | ------------------------------------------------------ |
 | `Healthz` | Public — bypasses auth via `Config.PublicMethods`      |
 | `Hello`   | Authenticated only — registered with an empty policy slice |
-| `Admin`   | Authenticated **and** `urn:greeter:roles` contains `greeter:admin` |
+| `Admin`   | Authenticated **and** `urn:greeter:permissions` contains `greeter:admin` |
 
 ## Layout
 
@@ -61,11 +61,12 @@ PROJECT_ID=<zitadel-project-id> \
 ```
 
 For the `admin` RPC to succeed, the service user's introspection response
-must include a custom claim `urn:greeter:roles` that contains the string
-`greeter:admin`. That can be set up via a Zitadel action that runs on the
-**Pre Userinfo creation** trigger and adds the claim — see the parent
-project's [`zitadel_actions/`](../../../zitadel_actions/) directory for
-examples.
+must include a custom claim `urn:greeter:permissions` that contains the
+string `greeter:admin`. The simplest way to set that up end-to-end is the
+bootstrap helper in [`scripts/`](../../scripts/README.md), which uses the
+[`admin`](../../admin) package to provision the project, roles, API app,
+service users, and the Pre-Userinfo action that flattens role grants into
+the `urn:greeter:permissions` claim.
 
 ## Regenerating the protobuf bindings
 
