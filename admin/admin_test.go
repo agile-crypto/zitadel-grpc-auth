@@ -1,5 +1,4 @@
 package admin
-package admin
 
 import (
 	"encoding/json"
