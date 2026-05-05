@@ -62,6 +62,8 @@ srvOpts, closer, err := server.New(server.Config{
     Insecure:                  true,
     CacheTTL:                  30 * time.Second,
     CacheMaxEntries:           10_000,
+    ExpectedIssuer:            "http://localhost:8080",
+    ExpectedAudience:          []string{"urn:zitadel:iam:org:project:id:" + projectID + ":aud"},
     PublicMethods:             []string{"/citius.CitiusService/Healthz"},
     Policies: map[string][]auth.PolicyFunc{
         "/citius.CitiusService/Encrypt":   {requireOp("citius:encrypt")},
@@ -84,14 +86,14 @@ check per axis they touch:
 ```go
 func (s *citiusServer) Encrypt(ctx context.Context, req *pb.EncryptRequest) (*pb.EncryptResponse, error) {
     c := auth.ClaimsFromContext(ctx)
-    if err := auth.AuthorizeGlobPattern(req.KeyName,
+    if err := auth.AuthorizeGlobPatternStrict(req.KeyName,
         c.StringSlice("urn:citius:allowed_key_patterns"),
         c.StringSlice("urn:citius:deny_key_patterns"),
     ); err != nil {
         return nil, err
     }
     if req.PolicyName != "" {
-        if err := auth.AuthorizeGlobPattern(req.PolicyName,
+        if err := auth.AuthorizeGlobPatternStrict(req.PolicyName,
             c.StringSlice("urn:citius:allowed_policy_patterns"),
             c.StringSlice("urn:citius:deny_policy_patterns"),
         ); err != nil {
@@ -186,9 +188,50 @@ predicates against your own claim names.
 | ----------------------------------------------- | ------------------------------------------------------ |
 | `c.String(key)` / `c.StringSlice(key)`          | read a claim                                            |
 | `c.HasStringInSlice(key, v)`                    | the most common predicate (e.g. permission lookup)      |
-| `auth.AuthorizeGlobPattern(name, allow, deny)`  | resource-level check, deny-wins, glob support           |
+| `auth.AuthorizeGlobPattern(name, allow, deny)`  | resource-level check, deny-wins, glob support — **fail-open on empty allow list** |
+| `auth.AuthorizeGlobPatternStrict(name, allow, deny)` | same shape, **default-deny on empty allow list** (recommended) |
 | `auth.All(p1, p2, ...)` / `auth.Any(p1, p2)`    | compose policies                                        |
 | `auth.Forbidden(fmt, ...)` / `auth.Unauthenticated(fmt, ...)` | construct properly-typed errors |
+
+## Security hardening
+
+The defaults are deliberately strict; the optional knobs below close the
+remaining gaps you should configure for production.
+
+- **Pin the issuer.** Set `server.Config.ExpectedIssuer` to the exact issuer
+  URL of the Zitadel instance you trust. Tokens whose `iss` claim does not
+  match are rejected with `Unauthenticated`, regardless of what the
+  introspection endpoint returned.
+- **Pin the audience.** Set `server.Config.ExpectedAudience` to the project
+  audience(s) your service expects (typically
+  `urn:zitadel:iam:org:project:id:<projectID>:aud`). This is the primary
+  defence against cross-audience token reuse: a token minted for a
+  different API in the same project introspects as `active=true` but its
+  `aud` will not match.
+- **Reflection is denied by default.** gRPC reflection RPCs go through the
+  same auth pipeline as everything else. Set
+  `AllowUnauthenticatedReflection = true` only for local dev.
+- **`AuthorizeGlobPatternStrict` over `AuthorizeGlobPattern`.** When the
+  allow list comes from a token claim, the strict variant fails closed if
+  that claim is absent (botched bootstrap, namespace typo, freshly
+  onboarded user). The non-strict variant is preserved for cases where
+  "no grants means no restriction" is intentional.
+- **Trust your metadata source.** The action script that the admin package
+  installs reads `<ns>:key_access` and `<ns>:policy_access` from **user
+  metadata** and surfaces them as authorization claims. This is only safe
+  if your Zitadel role design forbids users from writing their own
+  metadata. Audit the `USER_METADATA_WRITE` permission for every role you
+  grant; deny it on `Self`. If you cannot guarantee this, encode
+  resource scope into project role names instead and have your
+  `PolicyFunc` derive patterns from the role list.
+- **Expiry is rechecked.** Even if a custom `Introspector` returns
+  `active=true` with an `exp` in the past, the interceptor rejects it.
+- **Transport errors are briefly cached.** A failed introspection (timeout,
+  5xx) is cached for 1 second so a token-flood attacker cannot amplify
+  load on Zitadel by spinning a tight retry loop.
+- **Bearer header is strict.** Duplicate `authorization` metadata values,
+  embedded whitespace, and control characters in the token are all
+  rejected before introspection.
 
 ## Caching
 
