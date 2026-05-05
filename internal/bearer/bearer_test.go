@@ -20,6 +20,11 @@ func TestFromIncomingMetadata(t *testing.T) {
 		{"bearer mixed case", metadata.Pairs("authorization", "BeArEr abc"), "abc"},
 		{"trims whitespace", metadata.Pairs("authorization", "Bearer   abc  "), "abc"},
 		{"basic auth ignored", metadata.Pairs("authorization", "Basic dXNlcjpwYXNz"), ""},
+		{"duplicate header rejected", metadata.MD{"authorization": []string{"Bearer abc", "Bearer xyz"}}, ""},
+		{"control char in token rejected", metadata.Pairs("authorization", "Bearer abc\rdef"), ""},
+		{"newline in token rejected", metadata.Pairs("authorization", "Bearer abc\nxyz"), ""},
+		{"NUL in token rejected", metadata.Pairs("authorization", "Bearer abc\x00xyz"), ""},
+		{"embedded space rejected", metadata.Pairs("authorization", "Bearer abc def"), ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
