@@ -83,6 +83,33 @@ func TestAuthorizeGlobPattern(t *testing.T) {
 	}
 }
 
+func TestAuthorizeGlobPatternStrict(t *testing.T) {
+	cases := []struct {
+		name        string
+		resource    string
+		allow, deny []string
+		wantErr     bool
+	}{
+		{"empty allow → deny (default-deny)", "x", nil, nil, true},
+		{"wildcard allow", "anything", []string{"*"}, nil, false},
+		{"deny wins over allow", "secrets-prod", []string{"*"}, []string{"secrets-*"}, true},
+		{"matches allow pattern", "payments-2026", []string{"payments-*"}, nil, false},
+		{"non-match allow", "billing", []string{"payments-*"}, nil, true},
+		{"empty allow + non-matching deny still denies", "x", nil, []string{"never-matches-*"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := AuthorizeGlobPatternStrict(tc.resource, tc.allow, tc.deny)
+			if tc.wantErr && !IsForbidden(err) {
+				t.Fatalf("expected ErrForbidden, got %v", err)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected allow, got %v", err)
+			}
+		})
+	}
+}
+
 func TestAny_ReturnsLastError(t *testing.T) {
 	ctx := context.Background()
 	first := errors.New("first")
