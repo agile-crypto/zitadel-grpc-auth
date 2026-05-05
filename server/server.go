@@ -142,6 +142,24 @@ type Config struct {
 	// Set to true in production deployments that expose reflection but
 	// want to gate it.
 	EnforceAuthOnReflection bool
+
+	// ExpectedIssuer, when non-empty, requires the introspected token's
+	// "iss" claim to match exactly. This is defence-in-depth: a healthy
+	// Zitadel will only return active=true for tokens it issued, but an
+	// explicit issuer pin protects against misconfiguration (e.g. an
+	// introspection client pointed at the wrong instance) and against a
+	// future where multiple issuers feed the same introspection endpoint.
+	ExpectedIssuer string
+
+	// ExpectedAudience, when non-empty, requires the introspected token's
+	// "aud" claim to contain at least one of the listed values. This is
+	// the primary protection against cross-audience token reuse: a token
+	// minted for a different API application in the same Zitadel project
+	// will introspect as active=true, but its audience will not include
+	// this service. Setting ExpectedAudience to the project audience
+	// (e.g. "urn:zitadel:iam:org:project:id:<projectID>:aud") closes that
+	// gap.
+	ExpectedAudience []string
 }
 
 // Closer releases resources held by the server bundle (currently the
@@ -194,6 +212,8 @@ func New(cfg Config) ([]grpc.ServerOption, Closer, error) {
 		policies:          cfg.Policies,
 		publicMethods:     pub,
 		enforceReflection: cfg.EnforceAuthOnReflection,
+		expectedIssuer:    cfg.ExpectedIssuer,
+		expectedAudience:  append([]string(nil), cfg.ExpectedAudience...),
 	}
 
 	return []grpc.ServerOption{

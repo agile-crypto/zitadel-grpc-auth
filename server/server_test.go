@@ -370,6 +370,78 @@ func TestServer_Validation_RequiredFields(t *testing.T) {
 	}
 }
 
+func TestServer_ExpectedIssuer_Mismatch(t *testing.T) {
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) {
+		return auth.NewClaims(map[string]any{
+			"active": true,
+			"sub":    "alice",
+			"iss":    "https://attacker.example.com",
+		}), time.Time{}, nil
+	}}
+	srvOpts, closer, _ := New(Config{
+		RequireAuth:    true,
+		Introspector:   intr,
+		ExpectedIssuer: "https://issuer.example.com",
+		Policies:       map[string][]auth.PolicyFunc{"/grpc.health.v1.Health/Check": nil},
+	})
+	defer closer.Close()
+	addr, _, stop := startServer(t, srvOpts)
+	defer stop()
+	conn := dial(t, addr)
+	defer conn.Close()
+	if err := callCheckWithToken(t, conn, "tok"); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated for bad issuer, got %v", err)
+	}
+}
+
+func TestServer_ExpectedAudience_Mismatch(t *testing.T) {
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) {
+		return auth.NewClaims(map[string]any{
+			"active": true,
+			"sub":    "alice",
+			"aud":    []any{"some-other-api"},
+		}), time.Time{}, nil
+	}}
+	srvOpts, closer, _ := New(Config{
+		RequireAuth:      true,
+		Introspector:     intr,
+		ExpectedAudience: []string{"urn:zitadel:iam:org:project:id:greeter:aud"},
+		Policies:         map[string][]auth.PolicyFunc{"/grpc.health.v1.Health/Check": nil},
+	})
+	defer closer.Close()
+	addr, _, stop := startServer(t, srvOpts)
+	defer stop()
+	conn := dial(t, addr)
+	defer conn.Close()
+	if err := callCheckWithToken(t, conn, "tok"); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated for bad audience, got %v", err)
+	}
+}
+
+func TestServer_ExpectedAudience_Match(t *testing.T) {
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) {
+		return auth.NewClaims(map[string]any{
+			"active": true,
+			"sub":    "alice",
+			"aud":    []any{"other", "urn:zitadel:iam:org:project:id:greeter:aud"},
+		}), time.Time{}, nil
+	}}
+	srvOpts, closer, _ := New(Config{
+		RequireAuth:      true,
+		Introspector:     intr,
+		ExpectedAudience: []string{"urn:zitadel:iam:org:project:id:greeter:aud"},
+		Policies:         map[string][]auth.PolicyFunc{"/grpc.health.v1.Health/Check": nil},
+	})
+	defer closer.Close()
+	addr, _, stop := startServer(t, srvOpts)
+	defer stop()
+	conn := dial(t, addr)
+	defer conn.Close()
+	if err := callCheckWithToken(t, conn, "tok"); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+}
+
 func TestServer_Validation_RejectsHTTPInProd(t *testing.T) {
 	_, _, err := New(Config{
 		RequireAuth:               true,

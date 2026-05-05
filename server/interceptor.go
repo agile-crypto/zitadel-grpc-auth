@@ -19,7 +19,9 @@ type enforcer struct {
 	cache             *introspectionCache
 	policies          map[string][]auth.PolicyFunc
 	publicMethods     map[string]struct{}
-	enforceReflection bool // false (default) → reflection bypasses auth
+	enforceReflection bool     // false (default) → reflection bypasses auth
+	expectedIssuer    string   // "" disables the check
+	expectedAudience  []string // empty disables the check
 }
 
 // authorize is the core decision: does the call described by (ctx, method)
@@ -49,6 +51,13 @@ func (e *enforcer) authorize(ctx context.Context, method string) (context.Contex
 	claims, err := e.cache.resolve(ctx, token, e.introspector)
 	if err != nil {
 		return ctx, toGRPCStatus(err)
+	}
+
+	if e.expectedIssuer != "" && claims.Issuer() != e.expectedIssuer {
+		return ctx, status.Error(codes.Unauthenticated, "token issuer not accepted")
+	}
+	if len(e.expectedAudience) > 0 && !audienceMatches(claims.StringSlice("aud"), e.expectedAudience) {
+		return ctx, status.Error(codes.Unauthenticated, "token audience not accepted")
 	}
 
 	policies, registered := e.policies[method]
@@ -144,6 +153,24 @@ func toGRPCStatus(err error) error {
 		}
 	}
 	return status.Error(codes.Internal, "internal authorization error")
+}
+
+// audienceMatches reports whether the token's audience list intersects the
+// configured expected-audience set. The caller-side check is intentionally
+// strict (any single match is sufficient) so callers can configure both a
+// project audience and a per-API audience without forcing both to appear.
+func audienceMatches(tokenAud, expected []string) bool {
+	if len(tokenAud) == 0 {
+		return false
+	}
+	for _, want := range expected {
+		for _, got := range tokenAud {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // noopUnary forwards every unary RPC untouched. Used in disabled mode.
