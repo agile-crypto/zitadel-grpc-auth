@@ -75,7 +75,13 @@ func (h *httpIntrospector) Introspect(ctx context.Context, token string) (*auth.
 		return nil, time.Time{}, fmt.Errorf("introspect: read body: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, time.Time{}, fmt.Errorf("introspect: HTTP %d: %s", resp.StatusCode, truncate(string(body), 256))
+		// Deliberately do NOT echo the response body in the error: a
+		// misconfigured issuer can echo the submitted token in its
+		// error payload (some non-Zitadel introspection endpoints do).
+		// We log the status code only; operators who need to debug a
+		// failing introspection should attach a custom http.Client
+		// transport for full request/response capture.
+		return nil, time.Time{}, fmt.Errorf("introspect: HTTP %d", resp.StatusCode)
 	}
 
 	var raw map[string]any
@@ -91,11 +97,4 @@ func (h *httpIntrospector) Introspect(ctx context.Context, token string) (*auth.
 		return claims, time.Time{}, auth.Unauthenticated("token not active")
 	}
 	return claims, claims.Expiration(), nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
