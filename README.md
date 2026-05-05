@@ -61,7 +61,7 @@ srvOpts, closer, err := server.New(server.Config{
     IntrospectionClientSecret: apiClientSecret,
     Insecure:                  true,
     CacheTTL:                  30 * time.Second,
-    CacheMaxEntries:           10_000,
+    CacheMaxEntries:           10000,
     ExpectedIssuer:            "http://localhost:8080",
     ExpectedAudience:          []string{"urn:zitadel:iam:org:project:id:" + projectID + ":aud"},
     PublicMethods:             []string{"/citius.CitiusService/Healthz"},
@@ -295,13 +295,9 @@ No gRPC, no network, no Zitadel mocks needed.
 
 ## Non-goals (deliberate)
 
-- ❌ JWT validation (opaque tokens only)
-- ❌ Multi-tenancy / multi-instance routing
-- ❌ HTTP middleware (gRPC only)
-- ❌ A general OIDC framework
-- ❌ Push-based revocation (rely on cache TTL)
-- ❌ Configuration loading (no env reading inside the module)
-
-## License
-
-See the parent project.
+-  JWT validation (opaque tokens only)
+-  Multi-tenancy / multi-instance routing
+-  HTTP middleware (gRPC only)
+-  A general OIDC framework
+-  Push-based revocation (rely on cache TTL)
+-  Configuration loading (no env reading inside the module)
