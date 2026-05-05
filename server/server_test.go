@@ -468,6 +468,32 @@ func TestServer_ExpectedAudience_Match(t *testing.T) {
 	}
 }
 
+func TestServer_ExpiredToken_RejectedDefenseInDepth(t *testing.T) {
+	// Simulate a custom Introspector that erroneously returns active=true
+	// with an exp in the past. The interceptor must still reject.
+	expired := time.Now().Add(-time.Minute)
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) {
+		return auth.NewClaims(map[string]any{
+			"active": true,
+			"sub":    "alice",
+			"exp":    float64(expired.Unix()),
+		}), time.Time{}, nil // returning zero exp so the cache doesn't shorten TTL to 0
+	}}
+	srvOpts, closer, _ := New(Config{
+		RequireAuth:  true,
+		Introspector: intr,
+		Policies:     map[string][]auth.PolicyFunc{"/grpc.health.v1.Health/Check": nil},
+	})
+	defer closer.Close()
+	addr, _, stop := startServer(t, srvOpts)
+	defer stop()
+	conn := dial(t, addr)
+	defer conn.Close()
+	if err := callCheckWithToken(t, conn, "tok"); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated for expired token, got %v", err)
+	}
+}
+
 func TestServer_Validation_PublicPolicyOverlap(t *testing.T) {
 	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) { return aliceClaims(), time.Time{}, nil }}
 	_, _, err := New(Config{

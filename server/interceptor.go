@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"strings"
+	"time"
 
 	auth "github.ibm.com/citius/zitadel-grpc-auth"
 	"github.ibm.com/citius/zitadel-grpc-auth/internal/bearer"
@@ -51,6 +52,14 @@ func (e *enforcer) authorize(ctx context.Context, method string) (context.Contex
 	claims, err := e.cache.resolve(ctx, token, e.introspector)
 	if err != nil {
 		return ctx, toGRPCStatus(err)
+	}
+
+	// Defence-in-depth: a healthy Zitadel will only return active=true
+	// for a non-expired token, but a stale cache entry, a clock skew on
+	// the introspecting host, or a misbehaving custom Introspector could
+	// surface an expired token here. Recheck before honouring it.
+	if exp := claims.Expiration(); !exp.IsZero() && time.Now().After(exp) {
+		return ctx, status.Error(codes.Unauthenticated, "token expired")
 	}
 
 	if e.expectedIssuer != "" && claims.Issuer() != e.expectedIssuer {
