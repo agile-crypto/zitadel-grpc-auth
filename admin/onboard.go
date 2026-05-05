@@ -17,6 +17,11 @@ func (c *Client) Onboard(ctx context.Context, in OnboardInput) (*OnboardResult, 
 	if strings.TrimSpace(in.Username) == "" {
 		return nil, fmt.Errorf("admin.Onboard: Username is required")
 	}
+	for _, p := range in.Permissions {
+		if err := validatePermission(strings.TrimSpace(p)); err != nil {
+			return nil, fmt.Errorf("admin.Onboard: %w", err)
+		}
+	}
 	if err := validatePatterns(in.KeyAccess.AllowedKeyPatterns, in.KeyAccess.DenyKeyPatterns, in.PolicyAccess.AllowedPolicyPatterns, in.PolicyAccess.DenyPolicyPatterns); err != nil {
 		return nil, err
 	}
@@ -239,9 +244,52 @@ func (c *Client) findProjectByName(ctx context.Context, orgID, projectName strin
 func validatePatterns(groups ...[]string) error {
 	for _, group := range groups {
 		for _, pattern := range group {
+			if pattern == "" {
+				return fmt.Errorf("%w: empty pattern", ErrInvalidPattern)
+			}
 			if _, err := filepath.Match(pattern, "probe"); err != nil {
 				return fmt.Errorf("%w: %q: %v", ErrInvalidPattern, pattern, err)
 			}
+			// Restrict to a printable, non-whitespace ASCII subset. The
+			// pattern is later embedded in JSON metadata that flows
+			// through Zitadel and back into a token claim — anything
+			// goes structurally, but constraining the character set
+			// makes audit trails legible and stops accidental injection
+			// of newlines, control characters, or quoting tricks into
+			// downstream logs and policy decisions.
+			for _, r := range pattern {
+				switch {
+				case r >= 'a' && r <= 'z':
+				case r >= 'A' && r <= 'Z':
+				case r >= '0' && r <= '9':
+				case r == '*' || r == '-' || r == '_' || r == '.' || r == ':' || r == '/':
+				default:
+					return fmt.Errorf("%w: %q contains disallowed character %q (allowed: alphanumerics and *-_.:/ )", ErrInvalidPattern, pattern, r)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validatePermission restricts permission/role keys to the same character
+// set we apply to namespaces. Permissions become Zitadel project role keys
+// and end up inside a token claim consulted by policies; anything outside
+// this character set is almost always either a typo or an attempt to
+// smuggle structure through a field that downstream code treats as a
+// plain string.
+func validatePermission(p string) error {
+	if p == "" {
+		return fmt.Errorf("admin: permission must not be empty")
+	}
+	for _, r := range p {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == ':' || r == '-' || r == '_' || r == '.':
+		default:
+			return fmt.Errorf("admin: permission %q contains disallowed character %q (allowed: alphanumerics and :-_.)", p, r)
 		}
 	}
 	return nil

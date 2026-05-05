@@ -22,6 +22,11 @@ func (c *Client) Bootstrap(ctx context.Context, in BootstrapInput) (*BootstrapRe
 	if len(in.Operations) == 0 {
 		return nil, fmt.Errorf("admin.Bootstrap: at least one operation is required")
 	}
+	for _, op := range in.Operations {
+		if err := validatePermission(strings.TrimSpace(op.Permission)); err != nil {
+			return nil, fmt.Errorf("admin.Bootstrap: %w", err)
+		}
+	}
 
 	namespace := normalizeNamespace(in.ClaimNamespace, c.cfg.Namespace)
 	orgID, err := c.resolveOrgID(ctx)
