@@ -37,6 +37,7 @@ var actionTemplate = template.Must(template.New("action").Parse(`function {{.Act
       grants.grants.forEach(function (grant) {
         if (!grant.roles) return;
         grant.roles.forEach(function (role) {
+          if (typeof role !== 'string' || role.length === 0) return;
           if (permissions.indexOf(role) === -1) permissions.push(role);
         });
       });
