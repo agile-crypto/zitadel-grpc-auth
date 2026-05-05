@@ -132,11 +132,20 @@ func (c *introspectionCache) boundTTL(now, exp time.Time) time.Duration {
 	return c.ttl
 }
 
+// transportErrorTTL bounds how long a transport-level introspection failure
+// (timeout, 5xx, network error) is cached before we retry. It is intentionally
+// short so a transient Zitadel blip self-heals quickly, but long enough to
+// stop a single caller's retry loop from converting a token-flood DoS into
+// an upstream-flood DoS. See [F5] in the security audit.
+const transportErrorTTL = 1 * time.Second
+
 // resolve returns claims for the given token, going through the cache and
 // singleflight. The introspector is called at most once per (token, in-flight
 // window). On error from the introspector, the error is returned to the
-// caller; if it wraps [auth.ErrUnauthenticated] the negative result is also
-// cached.
+// caller; auth-level negatives are cached for the configured TTL, and
+// transport-level negatives are cached for [transportErrorTTL] to prevent
+// a single attacker (or a thrashing upstream) from amplifying load on
+// Zitadel.
 func (c *introspectionCache) resolve(ctx context.Context, token string, intr Introspector) (*auth.Claims, error) {
 	key := hashToken(token)
 	now := time.Now()
@@ -153,14 +162,24 @@ func (c *introspectionCache) resolve(ctx context.Context, token string, intr Int
 		}
 		claims, exp, err := intr.Introspect(ctx, token)
 		if err != nil {
-			// Cache negative outcomes (auth-level), not transport errors.
-			if auth.IsUnauthenticated(err) && !c.disabled() {
-				c.put(key, &cachedEntry{
-					claims:    claims,
-					err:       err,
-					expiresAt: now.Add(c.ttl),
-				})
+			if c.disabled() {
+				return &cachedEntry{claims: claims, err: err}, nil
 			}
+			ttl := c.ttl
+			if !auth.IsUnauthenticated(err) {
+				// Transport / unexpected errors get a much shorter TTL
+				// so the cache doesn't pin a stale failure once Zitadel
+				// recovers, but still elides a tight retry loop.
+				ttl = transportErrorTTL
+				if c.ttl > 0 && c.ttl < ttl {
+					ttl = c.ttl
+				}
+			}
+			c.put(key, &cachedEntry{
+				claims:    claims,
+				err:       err,
+				expiresAt: now.Add(ttl),
+			})
 			return &cachedEntry{claims: claims, err: err}, nil
 		}
 		ttl := c.boundTTL(now, exp)

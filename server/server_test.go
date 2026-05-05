@@ -363,6 +363,32 @@ func TestServer_CacheTTLBoundedByTokenExp(t *testing.T) {
 	}
 }
 
+func TestServer_TransportError_BoundedNegativeCache(t *testing.T) {
+	// A non-auth error must still be cached briefly so a hostile retry
+	// loop can't amplify load on Zitadel. See cache.go transportErrorTTL.
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) {
+		return nil, time.Time{}, context.DeadlineExceeded
+	}}
+	srvOpts, closer, _ := New(Config{
+		RequireAuth:     true,
+		Introspector:    intr,
+		CacheTTL:        time.Minute,
+		CacheMaxEntries: 100,
+		Policies:        map[string][]auth.PolicyFunc{"/grpc.health.v1.Health/Check": nil},
+	})
+	defer closer.Close()
+	addr, _, stop := startServer(t, srvOpts)
+	defer stop()
+	conn := dial(t, addr)
+	defer conn.Close()
+	for i := 0; i < 5; i++ {
+		_ = callCheckWithToken(t, conn, "tok-transport-err")
+	}
+	if got := intr.calls.Load(); got != 1 {
+		t.Fatalf("expected transport error to be cached briefly (1 call), got %d", got)
+	}
+}
+
 func TestServer_Validation_RequiredFields(t *testing.T) {
 	_, _, err := New(Config{RequireAuth: true, Issuer: "http://x"})
 	if err == nil {
