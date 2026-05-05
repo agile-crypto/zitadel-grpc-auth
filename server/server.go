@@ -200,6 +200,10 @@ func New(cfg Config) ([]grpc.ServerOption, Closer, error) {
 		intr = built
 	}
 
+	if err := validateMethodSets(cfg); err != nil {
+		return nil, nil, err
+	}
+
 	cache := newCache(cfg.CacheTTL, effectiveMaxEntries(cfg))
 
 	pub := make(map[string]struct{}, len(cfg.PublicMethods))
@@ -254,4 +258,29 @@ func effectiveMaxEntries(cfg Config) int {
 		return cfg.CacheMaxEntries
 	}
 	return 10_000
+}
+
+// validateMethodSets rejects misconfigurations where the same method appears
+// in both PublicMethods and Policies. Without this check the public bypass
+// would silently win over the policy registration, masking what is almost
+// certainly an operator copy-paste error and turning a "should be guarded"
+// method into an unauthenticated public surface.
+func validateMethodSets(cfg Config) error {
+	if len(cfg.PublicMethods) == 0 || len(cfg.Policies) == 0 {
+		return nil
+	}
+	pub := make(map[string]struct{}, len(cfg.PublicMethods))
+	for _, m := range cfg.PublicMethods {
+		pub[m] = struct{}{}
+	}
+	var overlap []string
+	for m := range cfg.Policies {
+		if _, ok := pub[m]; ok {
+			overlap = append(overlap, m)
+		}
+	}
+	if len(overlap) > 0 {
+		return fmt.Errorf("server.Config: methods listed in both PublicMethods and Policies (public bypass would silently win): %s", strings.Join(overlap, ", "))
+	}
+	return nil
 }

@@ -468,6 +468,19 @@ func TestServer_ExpectedAudience_Match(t *testing.T) {
 	}
 }
 
+func TestServer_Validation_PublicPolicyOverlap(t *testing.T) {
+	intr := &fakeIntrospector{respond: func(string) (*auth.Claims, time.Time, error) { return aliceClaims(), time.Time{}, nil }}
+	_, _, err := New(Config{
+		RequireAuth:   true,
+		Introspector:  intr,
+		PublicMethods: []string{"/svc/M"},
+		Policies:      map[string][]auth.PolicyFunc{"/svc/M": nil},
+	})
+	if err == nil {
+		t.Fatal("expected validation error for Public/Policy overlap")
+	}
+}
+
 func TestServer_Validation_RejectsHTTPInProd(t *testing.T) {
 	_, _, err := New(Config{
 		RequireAuth:               true,
