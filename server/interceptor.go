@@ -15,13 +15,13 @@ import (
 // enforcer holds the wired-up authentication+authorization pipeline. Both
 // unary and stream interceptors share this state.
 type enforcer struct {
-	introspector      Introspector
-	cache             *introspectionCache
-	policies          map[string][]auth.PolicyFunc
-	publicMethods     map[string]struct{}
-	enforceReflection bool     // false (default) → reflection bypasses auth
-	expectedIssuer    string   // "" disables the check
-	expectedAudience  []string // empty disables the check
+	introspector       Introspector
+	cache              *introspectionCache
+	policies           map[string][]auth.PolicyFunc
+	publicMethods      map[string]struct{}
+	allowUnauthReflect bool     // false (default) → reflection requires auth like any other RPC
+	expectedIssuer     string   // "" disables the check
+	expectedAudience   []string // empty disables the check
 }
 
 // authorize is the core decision: does the call described by (ctx, method)
@@ -81,7 +81,7 @@ func (e *enforcer) isPublic(method string) bool {
 	if _, ok := e.publicMethods[method]; ok {
 		return true
 	}
-	if !e.enforceReflection &&
+	if e.allowUnauthReflect &&
 		(strings.HasPrefix(method, "/grpc.reflection.v1.") ||
 			strings.HasPrefix(method, "/grpc.reflection.v1alpha.")) {
 		return true

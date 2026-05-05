@@ -133,15 +133,16 @@ type Config struct {
 	// context.
 	PublicMethods []string
 
-	// EnforceAuthOnReflection makes gRPC reflection RPCs
-	// ("/grpc.reflection.v1.*", "/grpc.reflection.v1alpha.*") subject to
-	// the same auth checks as application RPCs.
+	// AllowUnauthenticatedReflection lets gRPC reflection RPCs
+	// ("/grpc.reflection.v1.*", "/grpc.reflection.v1alpha.*") bypass
+	// authentication and authorization. The default is false: reflection
+	// is treated like any other RPC and must be either listed in
+	// PublicMethods or have policies registered.
 	//
-	// The default is false, which means reflection bypasses auth so common
-	// dev workflows (e.g. grpcurl listing services) work out of the box.
-	// Set to true in production deployments that expose reflection but
-	// want to gate it.
-	EnforceAuthOnReflection bool
+	// Production deployments should leave this false (or omit it) and
+	// disable the reflection service entirely. Set to true only for local
+	// development where workflows like `grpcurl list` are required.
+	AllowUnauthenticatedReflection bool
 
 	// ExpectedIssuer, when non-empty, requires the introspected token's
 	// "iss" claim to match exactly. This is defence-in-depth: a healthy
@@ -207,13 +208,13 @@ func New(cfg Config) ([]grpc.ServerOption, Closer, error) {
 	}
 
 	enf := &enforcer{
-		introspector:      intr,
-		cache:             cache,
-		policies:          cfg.Policies,
-		publicMethods:     pub,
-		enforceReflection: cfg.EnforceAuthOnReflection,
-		expectedIssuer:    cfg.ExpectedIssuer,
-		expectedAudience:  append([]string(nil), cfg.ExpectedAudience...),
+		introspector:        intr,
+		cache:               cache,
+		policies:            cfg.Policies,
+		publicMethods:       pub,
+		allowUnauthReflect:  cfg.AllowUnauthenticatedReflection,
+		expectedIssuer:      cfg.ExpectedIssuer,
+		expectedAudience:    append([]string(nil), cfg.ExpectedAudience...),
 	}
 
 	return []grpc.ServerOption{
