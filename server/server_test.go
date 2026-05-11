@@ -97,8 +97,8 @@ func callCheckWithToken(t *testing.T, conn *grpc.ClientConn, token string) error
 
 func aliceClaims() *auth.Claims {
 	return auth.NewClaims(map[string]any{
-		"active":                  true,
-		"sub":                     "alice",
+		"active":                 true,
+		"sub":                    "alice",
 		"urn:citius:permissions": []any{"citius:read"},
 	})
 }

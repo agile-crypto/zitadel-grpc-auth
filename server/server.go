@@ -212,13 +212,13 @@ func New(cfg Config) ([]grpc.ServerOption, Closer, error) {
 	}
 
 	enf := &enforcer{
-		introspector:        intr,
-		cache:               cache,
-		policies:            cfg.Policies,
-		publicMethods:       pub,
-		allowUnauthReflect:  cfg.AllowUnauthenticatedReflection,
-		expectedIssuer:      cfg.ExpectedIssuer,
-		expectedAudience:    append([]string(nil), cfg.ExpectedAudience...),
+		introspector:       intr,
+		cache:              cache,
+		policies:           cfg.Policies,
+		publicMethods:      pub,
+		allowUnauthReflect: cfg.AllowUnauthenticatedReflection,
+		expectedIssuer:     cfg.ExpectedIssuer,
+		expectedAudience:   append([]string(nil), cfg.ExpectedAudience...),
 	}
 
 	return []grpc.ServerOption{
