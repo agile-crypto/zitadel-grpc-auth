@@ -1,4 +1,4 @@
-module github.ibm.com/citius/zitadel-grpc-auth
+module github.com/agile-crypto/zitadel-grpc-auth
 
 go 1.25.0
 
