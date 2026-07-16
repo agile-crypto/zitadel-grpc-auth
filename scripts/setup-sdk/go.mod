@@ -7,13 +7,13 @@
 // own admin package) is wired in through a relative `replace` directive
 // — there is no expectation of pulling zitadel-grpc-auth from a registry
 // just to run the bootstrap helper.
-module github.ibm.com/citius/zitadel-grpc-auth/scripts/setup-sdk
+module github.com/agile-crypto/zitadel-grpc-auth/scripts/setup-sdk
 
 go 1.25.0
 
 require (
 	github.com/joho/godotenv v1.5.1
-	github.ibm.com/citius/zitadel-grpc-auth v0.0.0-00010101000000-000000000000
+	github.com/agile-crypto/zitadel-grpc-auth v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -44,4 +44,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.ibm.com/citius/zitadel-grpc-auth => ../..
+// replace github.ibm.com/citius/zitadel-grpc-auth => ../..

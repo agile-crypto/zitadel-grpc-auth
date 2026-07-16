@@ -5,10 +5,10 @@ authorization into gRPC services — with one switch to turn it off.
 
 ```go
 import (
-  "github.ibm.com/citius/zitadel-grpc-auth/admin"
-    auth   "github.ibm.com/citius/zitadel-grpc-auth"
-    "github.ibm.com/citius/zitadel-grpc-auth/client"
-    "github.ibm.com/citius/zitadel-grpc-auth/server"
+  "github.com/agile-crypto/zitadel-grpc-auth/admin"
+    auth   "github.com/agile-crypto/zitadel-grpc-auth"
+    "github.com/agile-crypto/zitadel-grpc-auth/client"
+    "github.com/agile-crypto/zitadel-grpc-auth/server"
 )
 ```
 
@@ -41,8 +41,8 @@ By default, the server now uses the Zitadel Go SDK introspection verifier.
 
 ```go
 import (
-    auth   "github.ibm.com/citius/zitadel-grpc-auth"
-    "github.ibm.com/citius/zitadel-grpc-auth/server"
+    auth   "github.com/agile-crypto/zitadel-grpc-auth"
+    "github.com/agile-crypto/zitadel-grpc-auth/server"
 )
 
 requireOp := func(op string) auth.PolicyFunc {
@@ -138,7 +138,7 @@ _, _ = ac.Onboard(ctx, admin.OnboardInput{
 
 ```go
 import (
-    "github.ibm.com/citius/zitadel-grpc-auth/client"
+    "github.com/agile-crypto/zitadel-grpc-auth/client"
 )
 
 authOpts, closer, err := client.New(ctx, client.Config{

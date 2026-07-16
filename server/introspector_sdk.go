@@ -13,7 +13,7 @@ import (
 	oauthz "github.com/zitadel/zitadel-go/v3/pkg/authorization/oauth"
 	"github.com/zitadel/zitadel-go/v3/pkg/zitadel"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
 )
 
 type sdkIntrospector struct {

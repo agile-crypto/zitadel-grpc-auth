@@ -41,8 +41,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/agile-crypto/zitadel-grpc-auth/admin"
 	"github.com/joho/godotenv"
-	"github.ibm.com/citius/zitadel-grpc-auth/admin"
 )
 
 // Config is the JSON document written to scripts/generated-config.json.

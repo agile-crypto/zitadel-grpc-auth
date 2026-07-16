@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
-	"github.ibm.com/citius/zitadel-grpc-auth/internal/bearer"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
+	"github.com/agile-crypto/zitadel-grpc-auth/internal/bearer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

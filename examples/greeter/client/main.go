@@ -25,8 +25,8 @@ import (
 	"os"
 	"time"
 
-	"github.ibm.com/citius/zitadel-grpc-auth/client"
-	pb "github.ibm.com/citius/zitadel-grpc-auth/examples/greeter/pb"
+	"github.com/agile-crypto/zitadel-grpc-auth/client"
+	pb "github.com/agile-crypto/zitadel-grpc-auth/examples/greeter/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

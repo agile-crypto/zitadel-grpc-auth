@@ -35,7 +35,7 @@ import (
 	"strings"
 	"time"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
 	"google.golang.org/grpc"
 )
 

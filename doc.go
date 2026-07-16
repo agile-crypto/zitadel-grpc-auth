@@ -13,10 +13,10 @@
 //
 // Transport-specific code lives in the subpackages:
 //
-//   - [github.ibm.com/citius/zitadel-grpc-auth/client] — gRPC dial-side
+//   - [github.com/agile-crypto/zitadel-grpc-auth/client] — gRPC dial-side
 //     interceptors that attach bearer tokens via the OAuth2
 //     client-credentials flow.
-//   - [github.ibm.com/citius/zitadel-grpc-auth/server] — gRPC server-side
+//   - [github.com/agile-crypto/zitadel-grpc-auth/server] — gRPC server-side
 //     interceptors that introspect tokens against Zitadel, cache results,
 //     and enforce per-method policies.
 //

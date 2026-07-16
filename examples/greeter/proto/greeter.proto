@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package greeter.v1;
 
-option go_package = "github.ibm.com/citius/zitadel-grpc-auth/examples/greeter/pb;greeterpb";
+option go_package = "github.com/agile-crypto/zitadel-grpc-auth/examples/greeter/pb;greeterpb";
 
 // Greeter is a tiny example service used to demonstrate
 // zitadel-grpc-auth wiring. It has:

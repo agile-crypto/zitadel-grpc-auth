@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

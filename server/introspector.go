@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
 )
 
 // httpIntrospector implements [Introspector] by POSTing to the OAuth2 token

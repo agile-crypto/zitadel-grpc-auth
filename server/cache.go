@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	auth "github.ibm.com/citius/zitadel-grpc-auth"
+	auth "github.com/agile-crypto/zitadel-grpc-auth"
 	"golang.org/x/sync/singleflight"
 )
 
