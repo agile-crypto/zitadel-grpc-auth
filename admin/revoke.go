@@ -15,7 +15,11 @@ func (c *Client) Revoke(ctx context.Context, username string, mode RevokeMode) e
 	if username == "" {
 		return fmt.Errorf("admin.Revoke: username is required")
 	}
-	user, err := c.lookupUserByUsername(ctx, username)
+	orgID, err := c.resolveOrgID(ctx)
+	if err != nil {
+		return fmt.Errorf("admin.Revoke: resolve org: %w", err)
+	}
+	user, err := c.lookupUserByUsername(ctx, orgID, username)
 	if err != nil {
 		return fmt.Errorf("admin.Revoke: lookup user: %w", err)
 	}
@@ -53,20 +57,4 @@ func (c *Client) Revoke(ctx context.Context, username string, mode RevokeMode) e
 		}
 	}
 	return nil
-}
-
-func (c *Client) lookupUserByUsername(ctx context.Context, username string) (*userV2.User, error) {
-	// NOTE: same single-page caveat as ensureMachineUser — see the
-	// comment there. For >1-page organisations this lookup needs a
-	// server-side username filter.
-	resp, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
-	if err != nil {
-		return nil, err
-	}
-	for _, user := range resp.GetResult() {
-		if user.GetUsername() == username {
-			return user, nil
-		}
-	}
-	return nil, nil
 }

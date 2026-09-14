@@ -114,7 +114,7 @@ func TestNewHumanCreateRequestLeavesEmailVerificationPending(t *testing.T) {
 	}
 }
 
-func TestFindHumanUser(t *testing.T) {
+func TestRequireHumanUser(t *testing.T) {
 	human := &userV2.User{
 		UserId:   "human-1",
 		Username: "producer",
@@ -126,17 +126,17 @@ func TestFindHumanUser(t *testing.T) {
 		Type:     &userV2.User_Machine{Machine: &userV2.MachineUser{}},
 	}
 
-	got, err := findHumanUser([]*userV2.User{human, machine}, "producer")
+	got, err := requireHumanUser(human, "producer")
 	if err != nil || got != human {
-		t.Fatalf("findHumanUser human = (%v, %v), want (%v, nil)", got, err, human)
+		t.Fatalf("requireHumanUser human = (%v, %v), want (%v, nil)", got, err, human)
 	}
-	got, err = findHumanUser([]*userV2.User{human, machine}, "missing")
+	got, err = requireHumanUser(nil, "missing")
 	if err != nil || got != nil {
-		t.Fatalf("findHumanUser missing = (%v, %v), want (nil, nil)", got, err)
+		t.Fatalf("requireHumanUser missing = (%v, %v), want (nil, nil)", got, err)
 	}
-	got, err = findHumanUser([]*userV2.User{human, machine}, "worker")
+	got, err = requireHumanUser(machine, "worker")
 	if got != nil || !errors.Is(err, ErrUserTypeMismatch) {
-		t.Fatalf("findHumanUser machine = (%v, %v), want (nil, ErrUserTypeMismatch)", got, err)
+		t.Fatalf("requireHumanUser machine = (%v, %v), want (nil, ErrUserTypeMismatch)", got, err)
 	}
 }
 

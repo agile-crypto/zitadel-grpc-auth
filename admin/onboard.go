@@ -61,29 +61,26 @@ func (c *Client) Onboard(ctx context.Context, in OnboardInput) (*OnboardResult, 
 }
 
 func (c *Client) ensureMachineUser(ctx context.Context, orgID string, in OnboardInput) (*userV2.User, bool, error) {
-	// NOTE: ListUsers returns one page (default size, currently 100 in
-	// Zitadel). For organisations with more users than fit in a single
-	// page this lookup must be replaced with a server-side filter on
-	// username. Tracked as a follow-up; safe for the bootstrap-sized
-	// orgs this admin package targets today.
-	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
+	username := strings.TrimSpace(in.Username)
+	user, err := c.lookupUserByUsername(ctx, orgID, username)
 	if err != nil {
 		return nil, false, err
 	}
-	for _, user := range listed.GetResult() {
-		if user.GetUsername() == in.Username {
-			return user, false, nil
+	if user != nil {
+		if user.GetMachine() == nil {
+			return nil, false, fmt.Errorf("%w: username %q belongs to a non-machine user", ErrUserTypeMismatch, username)
 		}
+		return user, false, nil
 	}
 
 	displayName := strings.TrimSpace(in.DisplayName)
 	if displayName == "" {
-		displayName = in.Username
+		displayName = username
 	}
 	description := fmt.Sprintf("managed by zitadel-grpc-auth admin for %s", displayName)
 	created, err := c.api.users.CreateUser(ctx, &userV2.CreateUserRequest{
 		OrganizationId: orgID,
-		Username:       strPtr(in.Username),
+		Username:       strPtr(username),
 		UserType: &userV2.CreateUserRequest_Machine_{
 			Machine: &userV2.CreateUserRequest_Machine{
 				Name:            displayName,

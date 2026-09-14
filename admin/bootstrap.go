@@ -120,13 +120,13 @@ func dedupeOperations(operations []Operation) []Operation {
 }
 
 func (c *Client) ensureAPIApplication(ctx context.Context, projectID, appName string) (AppCredentials, error) {
-	resp, err := c.api.applications.ListApplications(ctx, &appV2.ListApplicationsRequest{})
+	app, err := c.lookupApplicationByName(ctx, projectID, appName)
 	if err != nil {
 		return AppCredentials{}, err
 	}
-	for _, app := range resp.GetApplications() {
-		if app.GetProjectId() != projectID || app.GetName() != appName || app.GetApiConfiguration() == nil {
-			continue
+	if app != nil {
+		if app.GetApiConfiguration() == nil {
+			return AppCredentials{}, fmt.Errorf("%w: application %q is not an API application", ErrApplicationTypeMismatch, appName)
 		}
 		return AppCredentials{ClientID: app.GetApiConfiguration().GetClientId()}, nil
 	}

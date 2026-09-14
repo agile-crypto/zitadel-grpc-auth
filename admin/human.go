@@ -48,17 +48,21 @@ func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordIn
 		return err
 	}
 
-	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
+	orgID, err := c.resolveOrgID(ctx)
 	if err != nil {
-		return fmt.Errorf("admin.ResetHumanPassword: list users: %w", err)
+		return fmt.Errorf("admin.ResetHumanPassword: resolve org: %w", err)
 	}
 	username := strings.TrimSpace(in.Username)
-	user, err := findHumanUser(listed.GetResult(), username)
+	user, err := c.lookupUserByUsername(ctx, orgID, username)
 	if err != nil {
-		return fmt.Errorf("admin.ResetHumanPassword: %w", err)
+		return fmt.Errorf("admin.ResetHumanPassword: lookup user: %w", err)
 	}
 	if user == nil {
 		return fmt.Errorf("admin.ResetHumanPassword: %w: %q", ErrUserNotFound, username)
+	}
+	user, err = requireHumanUser(user, username)
+	if err != nil {
+		return fmt.Errorf("admin.ResetHumanPassword: %w", err)
 	}
 
 	if _, err := c.api.users.SetPassword(ctx, newSetPasswordRequest(user.GetUserId(), in)); err != nil {
@@ -69,16 +73,14 @@ func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordIn
 }
 
 func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnboardInput) (*userV2.User, bool, error) {
-	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
-	if err != nil {
-		return nil, false, err
-	}
-	user, err := findHumanUser(listed.GetResult(), strings.TrimSpace(in.Username))
+	username := strings.TrimSpace(in.Username)
+	user, err := c.lookupUserByUsername(ctx, orgID, username)
 	if err != nil {
 		return nil, false, err
 	}
 	if user != nil {
-		return user, false, nil
+		user, err = requireHumanUser(user, username)
+		return user, false, err
 	}
 
 	created, err := c.api.users.CreateUser(ctx, newHumanCreateRequest(orgID, in))
@@ -96,17 +98,14 @@ func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnbo
 	return user, true, nil
 }
 
-func findHumanUser(users []*userV2.User, username string) (*userV2.User, error) {
-	for _, user := range users {
-		if user.GetUsername() != username {
-			continue
-		}
-		if user.GetHuman() == nil {
-			return nil, fmt.Errorf("%w: username %q belongs to a non-human user", ErrUserTypeMismatch, username)
-		}
-		return user, nil
+func requireHumanUser(user *userV2.User, username string) (*userV2.User, error) {
+	if user == nil {
+		return nil, nil
 	}
-	return nil, nil
+	if user.GetHuman() == nil {
+		return nil, fmt.Errorf("%w: username %q belongs to a non-human user", ErrUserTypeMismatch, username)
+	}
+	return user, nil
 }
 
 func newHumanCreateRequest(orgID string, in HumanOnboardInput) *userV2.CreateUserRequest {

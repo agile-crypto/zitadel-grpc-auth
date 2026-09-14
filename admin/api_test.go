@@ -41,6 +41,7 @@ func TestClientUsesInjectedServices(t *testing.T) {
 	}
 	client := &Client{
 		api:    adminServices{users: users},
+		cfg:    Config{OrgID: "org-1"},
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
