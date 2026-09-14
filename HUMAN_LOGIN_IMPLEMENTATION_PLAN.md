@@ -21,10 +21,10 @@ does not itself build the browser UI.
 | Done | ZGA-06 | `61c627d Validate PKCE web application input` | Defines the Web/OIDC input and enforces strict redirect URI and security-profile rules. |
 | Done | ZGA-07 | `d6291e0 Reconcile PKCE web applications` | Creates, reuses, or updates the exact OIDC application configuration and rejects type collisions. |
 | Done | ZGA-08 | `1e806e6 Add human auth configuration verification` | Reports drift in human type/state, grants, metadata, and OIDC application configuration. |
-| Done | ZGA-09 | `Test human provisioning with Zitadel` | Proves create, repeat, drift repair, collision, and password reset behavior against live Zitadel. |
-| Planned | ZGA-10 | `Document human authentication APIs` | Adds public package examples and the supported PKCE integration contract to the README. |
+| Done | ZGA-09 | `8fb4a88 Test human provisioning with Zitadel` | Proves create, repeat, drift repair, collision, and password reset behavior against live Zitadel. |
+| Done | ZGA-10 | `Document human authentication APIs` | Adds public package examples and the supported PKCE integration contract to the README. |
 
-Current count: **9 of 10 commits complete; 1 remains**. Commit count is not an
+Current count: **10 of 10 commits complete; none remain**. Commit count is not an
 effort percentage: OIDC reconciliation and verification are larger than the
 completed validation commits.
 
@@ -253,7 +253,7 @@ Acceptance:
 - reordered equivalent URI input is idempotent; and
 - no credential can appear in logs or non-secret results.
 
-### ZGA-08 — Read-only configuration verification — Planned
+### ZGA-08 — Read-only configuration verification — Done
 
 Commit message: `Add human auth configuration verification`
 
@@ -273,7 +273,7 @@ Verify:
 
 Passwords are intentionally unverifiable and must never be included.
 
-### ZGA-09 — Live Zitadel integration coverage — Planned
+### ZGA-09 — Live Zitadel integration coverage — Done
 
 Commit message: `Test human provisioning with Zitadel`
 
@@ -294,7 +294,7 @@ Scenarios:
 An actual browser login is a downstream end-to-end acceptance test because
 Zitadel intentionally has no resource-owner password grant.
 
-### ZGA-10 — Public documentation and handoff — Planned
+### ZGA-10 — Public documentation and handoff — Done
 
 Commit message: `Document human authentication APIs`
 

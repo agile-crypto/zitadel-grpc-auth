@@ -5,7 +5,7 @@ authorization into gRPC services — with one switch to turn it off.
 
 ```go
 import (
-  "github.com/agile-crypto/zitadel-grpc-auth/admin"
+    "github.com/agile-crypto/zitadel-grpc-auth/admin"
     auth   "github.com/agile-crypto/zitadel-grpc-auth"
     "github.com/agile-crypto/zitadel-grpc-auth/client"
     "github.com/agile-crypto/zitadel-grpc-auth/server"
@@ -118,13 +118,15 @@ ac, err := admin.NewClient(ctx, admin.Config{
 if err != nil { log.Fatal(err) }
 defer ac.Close()
 
-_, _ = ac.Bootstrap(ctx, admin.BootstrapInput{
+bootstrap, err := ac.Bootstrap(ctx, admin.BootstrapInput{
   ProjectName:    "citius-api",
   ClaimNamespace: "urn:citius",
   Operations: []admin.Operation{{
     Method: "/citius.CitiusService/Encrypt", Permission: "citius:encrypt", DisplayName: "Encrypt",
   }},
 })
+if err != nil { log.Fatal(err) }
+log.Printf("project ID: %s", bootstrap.ProjectID)
 
 _, _ = ac.Onboard(ctx, admin.OnboardInput{
   Username:    "svc-alice",
@@ -133,6 +135,116 @@ _, _ = ac.Onboard(ctx, admin.OnboardInput{
   KeyAccess: admin.KeyAccess{AllowedKeyPatterns: []string{"payments-*"}},
 })
 ```
+
+### Human users and the PKCE application
+
+Human onboarding is deliberately separate from machine-user onboarding. The
+initial password comes from an operator-controlled secret source and is sent
+only when the user is first created. Repeating `OnboardHuman` reuses the human,
+reconciles project roles and resource metadata, and leaves the existing password
+unchanged.
+
+```go
+desiredHuman := admin.HumanConfiguration{
+    Username:      "workbench-producer",
+    GivenName:     "Workbench",
+    FamilyName:    "Producer",
+    DisplayName:   "Workbench Producer",
+    Email:         "producer@example.com",
+    EmailVerified: true,
+    Permissions:   []string{"citius:encrypt"},
+    KeyAccess: admin.KeyAccess{
+        AllowedKeyPatterns: []string{"demo-*"},
+    },
+    PolicyAccess: admin.PolicyAccess{
+        AllowedPolicyPatterns: []string{"default", "compatibility-*"},
+    },
+}
+
+human, err := ac.OnboardHuman(ctx, admin.HumanOnboardInput{
+    Username:        desiredHuman.Username,
+    GivenName:       desiredHuman.GivenName,
+    FamilyName:      desiredHuman.FamilyName,
+    DisplayName:     desiredHuman.DisplayName,
+    Email:           desiredHuman.Email,
+    EmailVerified:   desiredHuman.EmailVerified,
+    InitialPassword: os.Getenv("CITIUS_INITIAL_HUMAN_PASSWORD"),
+    Permissions:     desiredHuman.Permissions,
+    KeyAccess:       desiredHuman.KeyAccess,
+    PolicyAccess:    desiredHuman.PolicyAccess,
+})
+if err != nil { log.Fatal(err) }
+log.Printf("human %s created=%t", human.LoginName, human.Created)
+
+webInput := admin.WebApplicationInput{
+    Name:                   "Citius API Workbench",
+    RedirectURIs:           []string{"https://workbench.example.com/auth/callback"},
+    PostLogoutRedirectURIs: []string{"https://workbench.example.com/signed-out"},
+    EnableRefreshTokens:    true,
+}
+web, err := ac.EnsureWebApplication(ctx, webInput)
+if err != nil { log.Fatal(err) }
+log.Printf("OIDC client ID: %s", web.ClientID)
+
+verification, err := ac.VerifyHumanAuthConfiguration(ctx, admin.HumanAuthConfigurationInput{
+    ClaimNamespace: "urn:citius",
+    Humans:         []admin.HumanConfiguration{desiredHuman},
+    WebApplication: webInput,
+})
+if err != nil { log.Fatal(err) }
+if !verification.Current {
+    log.Fatalf("human authentication configuration drift: %+v", verification.Drift)
+}
+```
+
+Onboarding never changes an existing password. Password rotation is an explicit
+operator action and does not change the user's grants, metadata, profile, or
+applications:
+
+```go
+err = ac.ResetHumanPassword(ctx, admin.ResetHumanPasswordInput{
+    Username:               desiredHuman.Username,
+    NewPassword:            os.Getenv("CITIUS_REPLACEMENT_HUMAN_PASSWORD"),
+    PasswordChangeRequired: true,
+})
+if err != nil { log.Fatal(err) }
+```
+
+### Python UI login handoff
+
+The workbench must use Zitadel's hosted login with
+[Authorization Code + PKCE](https://zitadel.com/docs/guides/integrate/login/oidc/login-users).
+It must not collect a password and exchange it for a token: Zitadel intentionally
+[does not offer the resource-owner password grant](https://zitadel.com/docs/apis/openidoauth/grant-types).
+The Python application should:
+
+1. Generate a PKCE verifier/challenge, state, and nonce, then redirect the browser
+   to the authorization endpoint from Zitadel discovery.
+2. Receive the authorization code at the exact registered redirect URI, verify
+   state, exchange the code using the verifier, and validate the ID-token nonce.
+   This public client has no client secret.
+3. Attach the access token as `authorization: Bearer <token>` metadata on Citius
+   gRPC calls. The Citius server then introspects it and applies method and
+   resource policies.
+
+Pass these non-secret values to the Python UI configuration:
+
+| Setting | Value or source |
+|---|---|
+| Issuer | Exact Zitadel issuer, for example `https://auth.example.com` |
+| Discovery URL | `<issuer>/.well-known/openid-configuration` |
+| OIDC client ID | `web.ClientID` returned by `EnsureWebApplication` |
+| Redirect URI | The exact entry in `webInput.RedirectURIs` |
+| Post-logout URI | The exact entry in `webInput.PostLogoutRedirectURIs` |
+| [Scopes](https://zitadel.com/docs/apis/openidoauth/scopes) | `openid profile email urn:zitadel:iam:org:project:id:<project-id>:aud` |
+| Optional refresh scope | Add `offline_access` only when `EnableRefreshTokens` is true and the UI needs refresh tokens |
+| Project ID | `bootstrap.ProjectID`, used in the API audience scope |
+| Citius gRPC target | The deployment endpoint, for example `citius.example.com:443` |
+
+The client ID, issuer, redirect URIs, scopes, project ID, and gRPC target are
+configuration rather than credentials. Initial passwords, replacement passwords,
+admin PATs, access tokens, and refresh tokens must remain in secret storage or
+the user's authenticated session and must not be copied into UI configuration.
 
 ## Quickstart — Client
 
