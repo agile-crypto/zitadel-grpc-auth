@@ -82,6 +82,12 @@ type HumanOnboardResult struct {
 	Created   bool
 }
 
+type ResetHumanPasswordInput struct {
+	Username               string
+	NewPassword            string
+	PasswordChangeRequired bool
+}
+
 type KeyAccess struct {
 	AllowedKeyPatterns []string
 	DenyKeyPatterns    []string
@@ -124,6 +130,13 @@ func OnboardHuman(ctx context.Context, c *Client, in HumanOnboardInput) (*HumanO
 		return nil, fmt.Errorf("admin.OnboardHuman: nil client")
 	}
 	return c.OnboardHuman(ctx, in)
+}
+
+func ResetHumanPassword(ctx context.Context, c *Client, in ResetHumanPasswordInput) error {
+	if c == nil {
+		return fmt.Errorf("admin.ResetHumanPassword: nil client")
+	}
+	return c.ResetHumanPassword(ctx, in)
 }
 
 func Revoke(ctx context.Context, c *Client, username string, mode RevokeMode) error {

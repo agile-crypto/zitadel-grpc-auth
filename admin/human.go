@@ -43,6 +43,31 @@ func (c *Client) OnboardHuman(ctx context.Context, in HumanOnboardInput) (*Human
 	return result, nil
 }
 
+func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordInput) error {
+	if err := validateResetHumanPasswordInput(in); err != nil {
+		return err
+	}
+
+	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	if err != nil {
+		return fmt.Errorf("admin.ResetHumanPassword: list users: %w", err)
+	}
+	username := strings.TrimSpace(in.Username)
+	user, err := findHumanUser(listed.GetResult(), username)
+	if err != nil {
+		return fmt.Errorf("admin.ResetHumanPassword: %w", err)
+	}
+	if user == nil {
+		return fmt.Errorf("admin.ResetHumanPassword: %w: %q", ErrUserNotFound, username)
+	}
+
+	if _, err := c.api.UserServiceV2().SetPassword(ctx, newSetPasswordRequest(user.GetUserId(), in)); err != nil {
+		return fmt.Errorf("admin.ResetHumanPassword: set password: %w", err)
+	}
+	c.logger.Info("reset Zitadel human password", "username", username, "user_id", user.GetUserId(), "password_change_required", in.PasswordChangeRequired)
+	return nil
+}
+
 func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnboardInput) (*userV2.User, bool, error) {
 	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
 	if err != nil {
@@ -122,6 +147,26 @@ func humanLoginName(user *userV2.User) string {
 		return preferred
 	}
 	return user.GetUsername()
+}
+
+func newSetPasswordRequest(userID string, in ResetHumanPasswordInput) *userV2.SetPasswordRequest {
+	return &userV2.SetPasswordRequest{
+		UserId: userID,
+		NewPassword: &userV2.Password{
+			Password:       in.NewPassword,
+			ChangeRequired: in.PasswordChangeRequired,
+		},
+	}
+}
+
+func validateResetHumanPasswordInput(in ResetHumanPasswordInput) error {
+	if strings.TrimSpace(in.Username) == "" {
+		return fmt.Errorf("admin.ResetHumanPassword: Username is required")
+	}
+	if in.NewPassword == "" {
+		return fmt.Errorf("admin.ResetHumanPassword: NewPassword is required")
+	}
+	return nil
 }
 
 func validateHumanOnboardInput(in HumanOnboardInput) error {

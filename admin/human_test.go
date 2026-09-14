@@ -150,3 +150,59 @@ func TestHumanLoginName(t *testing.T) {
 		t.Fatalf("humanLoginName = %q, want username fallback", got)
 	}
 }
+
+func TestValidateResetHumanPasswordInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   ResetHumanPasswordInput
+		wantErr string
+	}{
+		{
+			name:  "valid",
+			input: ResetHumanPasswordInput{Username: "producer", NewPassword: "new-password"},
+		},
+		{
+			name:    "missing username",
+			input:   ResetHumanPasswordInput{Username: " ", NewPassword: "new-password"},
+			wantErr: "Username is required",
+		},
+		{
+			name:    "missing password",
+			input:   ResetHumanPasswordInput{Username: "producer"},
+			wantErr: "NewPassword is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateResetHumanPasswordInput(tt.input)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateResetHumanPasswordInput: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("validateResetHumanPasswordInput error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestNewSetPasswordRequest(t *testing.T) {
+	in := ResetHumanPasswordInput{
+		Username:               "producer",
+		NewPassword:            "new-password",
+		PasswordChangeRequired: true,
+	}
+	req := newSetPasswordRequest("human-1", in)
+	if req.GetUserId() != "human-1" {
+		t.Fatalf("user ID = %q, want human-1", req.GetUserId())
+	}
+	if req.GetNewPassword().GetPassword() != in.NewPassword || !req.GetNewPassword().GetChangeRequired() {
+		t.Fatal("unexpected new password configuration")
+	}
+	if req.GetVerification() != nil {
+		t.Fatal("administrator reset must not provide current-password or verification-code credentials")
+	}
+}
