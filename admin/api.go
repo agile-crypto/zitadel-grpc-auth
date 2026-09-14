@@ -35,6 +35,7 @@ type userService interface {
 	DeleteUser(context.Context, *userV2.DeleteUserRequest, ...grpc.CallOption) (*userV2.DeleteUserResponse, error)
 	SetPassword(context.Context, *userV2.SetPasswordRequest, ...grpc.CallOption) (*userV2.SetPasswordResponse, error)
 	AddSecret(context.Context, *userV2.AddSecretRequest, ...grpc.CallOption) (*userV2.AddSecretResponse, error)
+	ListUserMetadata(context.Context, *userV2.ListUserMetadataRequest, ...grpc.CallOption) (*userV2.ListUserMetadataResponse, error)
 	SetUserMetadata(context.Context, *userV2.SetUserMetadataRequest, ...grpc.CallOption) (*userV2.SetUserMetadataResponse, error)
 	DeleteUserMetadata(context.Context, *userV2.DeleteUserMetadataRequest, ...grpc.CallOption) (*userV2.DeleteUserMetadataResponse, error)
 }

@@ -104,6 +104,44 @@ type WebApplicationResult struct {
 	Updated       bool
 }
 
+// HumanAuthConfigurationInput declares the human-login resources that should
+// already exist in Zitadel. Passwords are deliberately excluded because
+// Zitadel cannot return them and verification results must never carry them.
+type HumanAuthConfigurationInput struct {
+	ClaimNamespace string
+	Humans         []HumanConfiguration
+	WebApplication WebApplicationInput
+}
+
+// HumanConfiguration is the verifiable, non-secret portion of a human user.
+type HumanConfiguration struct {
+	Username               string
+	GivenName              string
+	FamilyName             string
+	DisplayName            string
+	Email                  string
+	PasswordChangeRequired bool
+	EmailVerified          bool
+	Permissions            []string
+	KeyAccess              KeyAccess
+	PolicyAccess           PolicyAccess
+}
+
+// ConfigurationDrift describes one mismatch without exposing credentials.
+type ConfigurationDrift struct {
+	Resource string
+	Field    string
+	Expected string
+	Actual   string
+}
+
+// HumanAuthConfigurationResult is suitable for rendering directly in a CLI.
+type HumanAuthConfigurationResult struct {
+	ProjectID string
+	Current   bool
+	Drift     []ConfigurationDrift
+}
+
 type KeyAccess struct {
 	AllowedKeyPatterns []string
 	DenyKeyPatterns    []string
@@ -160,6 +198,13 @@ func EnsureWebApplication(ctx context.Context, c *Client, in WebApplicationInput
 		return nil, fmt.Errorf("admin.EnsureWebApplication: nil client")
 	}
 	return c.EnsureWebApplication(ctx, in)
+}
+
+func VerifyHumanAuthConfiguration(ctx context.Context, c *Client, in HumanAuthConfigurationInput) (*HumanAuthConfigurationResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("admin.VerifyHumanAuthConfiguration: nil client")
+	}
+	return c.VerifyHumanAuthConfiguration(ctx, in)
 }
 
 func Revoke(ctx context.Context, c *Client, username string, mode RevokeMode) error {
