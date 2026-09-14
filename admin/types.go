@@ -76,6 +76,12 @@ type HumanOnboardInput struct {
 	PolicyAccess           PolicyAccess
 }
 
+type HumanOnboardResult struct {
+	UserID    string
+	LoginName string
+	Created   bool
+}
+
 type KeyAccess struct {
 	AllowedKeyPatterns []string
 	DenyKeyPatterns    []string
@@ -111,6 +117,13 @@ func Onboard(ctx context.Context, c *Client, in OnboardInput) (*OnboardResult, e
 		return nil, fmt.Errorf("admin.Onboard: nil client")
 	}
 	return c.Onboard(ctx, in)
+}
+
+func OnboardHuman(ctx context.Context, c *Client, in HumanOnboardInput) (*HumanOnboardResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: nil client")
+	}
+	return c.OnboardHuman(ctx, in)
 }
 
 func Revoke(ctx context.Context, c *Client, username string, mode RevokeMode) error {

@@ -1,10 +1,128 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"strings"
+
+	userV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/user/v2"
 )
+
+func (c *Client) OnboardHuman(ctx context.Context, in HumanOnboardInput) (*HumanOnboardResult, error) {
+	if err := validateHumanOnboardInput(in); err != nil {
+		return nil, err
+	}
+
+	project, err := c.resolveProject(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: resolve project: %w", err)
+	}
+	orgID, err := c.resolveOrgID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: resolve org: %w", err)
+	}
+
+	user, created, err := c.ensureHumanUser(ctx, orgID, in)
+	if err != nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: ensure human user: %w", err)
+	}
+	if err := c.reconcileAuthorizations(ctx, orgID, project.GetProjectId(), user.GetUserId(), in.Permissions); err != nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: reconcile authorizations: %w", err)
+	}
+	if err := c.reconcileMetadata(ctx, user.GetUserId(), in.KeyAccess, in.PolicyAccess); err != nil {
+		return nil, fmt.Errorf("admin.OnboardHuman: reconcile metadata: %w", err)
+	}
+
+	result := &HumanOnboardResult{
+		UserID:    user.GetUserId(),
+		LoginName: humanLoginName(user),
+		Created:   created,
+	}
+	c.logger.Info("onboarded Zitadel human user", "username", strings.TrimSpace(in.Username), "user_id", result.UserID, "project_id", project.GetProjectId(), "created", created)
+	return result, nil
+}
+
+func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnboardInput) (*userV2.User, bool, error) {
+	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	if err != nil {
+		return nil, false, err
+	}
+	user, err := findHumanUser(listed.GetResult(), strings.TrimSpace(in.Username))
+	if err != nil {
+		return nil, false, err
+	}
+	if user != nil {
+		return user, false, nil
+	}
+
+	created, err := c.api.UserServiceV2().CreateUser(ctx, newHumanCreateRequest(orgID, in))
+	if err != nil {
+		return nil, false, err
+	}
+	got, err := c.api.UserServiceV2().GetUserByID(ctx, &userV2.GetUserByIDRequest{UserId: created.GetId()})
+	if err != nil {
+		return nil, false, err
+	}
+	user = got.GetUser()
+	if user == nil || user.GetHuman() == nil {
+		return nil, false, fmt.Errorf("%w: created user %q is not human", ErrUserTypeMismatch, strings.TrimSpace(in.Username))
+	}
+	return user, true, nil
+}
+
+func findHumanUser(users []*userV2.User, username string) (*userV2.User, error) {
+	for _, user := range users {
+		if user.GetUsername() != username {
+			continue
+		}
+		if user.GetHuman() == nil {
+			return nil, fmt.Errorf("%w: username %q belongs to a non-human user", ErrUserTypeMismatch, username)
+		}
+		return user, nil
+	}
+	return nil, nil
+}
+
+func newHumanCreateRequest(orgID string, in HumanOnboardInput) *userV2.CreateUserRequest {
+	displayName := strings.TrimSpace(in.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(in.GivenName) + " " + strings.TrimSpace(in.FamilyName)
+	}
+	profile := &userV2.SetHumanProfile{
+		GivenName:   strings.TrimSpace(in.GivenName),
+		FamilyName:  strings.TrimSpace(in.FamilyName),
+		DisplayName: strPtr(displayName),
+	}
+	email := &userV2.SetHumanEmail{Email: strings.TrimSpace(in.Email)}
+	if in.EmailVerified {
+		email.Verification = &userV2.SetHumanEmail_IsVerified{IsVerified: true}
+	}
+
+	return &userV2.CreateUserRequest{
+		OrganizationId: orgID,
+		Username:       strPtr(strings.TrimSpace(in.Username)),
+		UserType: &userV2.CreateUserRequest_Human_{
+			Human: &userV2.CreateUserRequest_Human{
+				Profile: profile,
+				Email:   email,
+				PasswordType: &userV2.CreateUserRequest_Human_Password{
+					Password: &userV2.Password{
+						Password:       in.InitialPassword,
+						ChangeRequired: in.PasswordChangeRequired,
+					},
+				},
+			},
+		},
+	}
+}
+
+func humanLoginName(user *userV2.User) string {
+	if preferred := strings.TrimSpace(user.GetPreferredLoginName()); preferred != "" {
+		return preferred
+	}
+	return user.GetUsername()
+}
 
 func validateHumanOnboardInput(in HumanOnboardInput) error {
 	required := []struct {
