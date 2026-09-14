@@ -155,6 +155,13 @@ func ResetHumanPassword(ctx context.Context, c *Client, in ResetHumanPasswordInp
 	return c.ResetHumanPassword(ctx, in)
 }
 
+func EnsureWebApplication(ctx context.Context, c *Client, in WebApplicationInput) (*WebApplicationResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("admin.EnsureWebApplication: nil client")
+	}
+	return c.EnsureWebApplication(ctx, in)
+}
+
 func Revoke(ctx context.Context, c *Client, username string, mode RevokeMode) error {
 	if c == nil {
 		return fmt.Errorf("admin.Revoke: nil client")

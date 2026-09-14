@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -16,6 +17,59 @@ type normalizedWebApplicationInput struct {
 	postLogoutRedirectURIs []string
 	enableRefreshTokens    bool
 	devMode                bool
+}
+
+func (c *Client) EnsureWebApplication(ctx context.Context, in WebApplicationInput) (*WebApplicationResult, error) {
+	normalized, err := normalizeWebApplicationInput(in)
+	if err != nil {
+		return nil, err
+	}
+	project, err := c.resolveProject(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("admin.EnsureWebApplication: resolve project: %w", err)
+	}
+	if project == nil {
+		return nil, fmt.Errorf("admin.EnsureWebApplication: %w", ErrProjectNotConfigured)
+	}
+
+	app, err := c.lookupApplicationByName(ctx, project.GetProjectId(), normalized.name)
+	if err != nil {
+		return nil, fmt.Errorf("admin.EnsureWebApplication: lookup application: %w", err)
+	}
+	if app == nil {
+		created, err := c.api.applications.CreateApplication(ctx, newWebApplicationCreateRequest(project.GetProjectId(), normalized))
+		if err != nil {
+			return nil, fmt.Errorf("admin.EnsureWebApplication: create application: %w", err)
+		}
+		result := &WebApplicationResult{
+			ApplicationID: created.GetApplicationId(),
+			ClientID:      created.GetOidcConfiguration().GetClientId(),
+			Created:       true,
+		}
+		c.logWebApplication(project.GetProjectId(), normalized.name, result)
+		return result, nil
+	}
+
+	oidc := app.GetOidcConfiguration()
+	if oidc == nil {
+		return nil, fmt.Errorf("admin.EnsureWebApplication: %w: application %q is not an OIDC application", ErrApplicationTypeMismatch, normalized.name)
+	}
+	result := &WebApplicationResult{ApplicationID: app.GetApplicationId(), ClientID: oidc.GetClientId()}
+	if !webApplicationMatches(oidc, normalized) {
+		if _, err := c.api.applications.UpdateApplication(ctx, newWebApplicationUpdateRequest(project.GetProjectId(), app.GetApplicationId(), normalized)); err != nil {
+			return nil, fmt.Errorf("admin.EnsureWebApplication: update application: %w", err)
+		}
+		result.Updated = true
+	}
+	c.logWebApplication(project.GetProjectId(), normalized.name, result)
+	return result, nil
+}
+
+func (c *Client) logWebApplication(projectID, name string, result *WebApplicationResult) {
+	if c.logger == nil {
+		return
+	}
+	c.logger.Info("reconciled Zitadel Web/OIDC application", "project_id", projectID, "application_id", result.ApplicationID, "name", name, "created", result.Created, "updated", result.Updated)
 }
 
 func normalizeWebApplicationInput(in WebApplicationInput) (normalizedWebApplicationInput, error) {
@@ -118,10 +172,6 @@ func isLoopbackHost(host string) bool {
 }
 
 func newWebApplicationCreateRequest(projectID string, in normalizedWebApplicationInput) *appV2.CreateApplicationRequest {
-	grantTypes := []appV2.OIDCGrantType{appV2.OIDCGrantType_OIDC_GRANT_TYPE_AUTHORIZATION_CODE}
-	if in.enableRefreshTokens {
-		grantTypes = append(grantTypes, appV2.OIDCGrantType_OIDC_GRANT_TYPE_REFRESH_TOKEN)
-	}
 	return &appV2.CreateApplicationRequest{
 		ProjectId: projectID,
 		Name:      in.name,
@@ -129,7 +179,7 @@ func newWebApplicationCreateRequest(projectID string, in normalizedWebApplicatio
 			OidcConfiguration: &appV2.CreateOIDCApplicationRequest{
 				RedirectUris:           append([]string(nil), in.redirectURIs...),
 				ResponseTypes:          []appV2.OIDCResponseType{appV2.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE},
-				GrantTypes:             grantTypes,
+				GrantTypes:             webApplicationGrantTypes(in.enableRefreshTokens),
 				ApplicationType:        appV2.OIDCApplicationType_OIDC_APP_TYPE_WEB,
 				AuthMethodType:         appV2.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE,
 				PostLogoutRedirectUris: append([]string(nil), in.postLogoutRedirectURIs...),
@@ -139,4 +189,74 @@ func newWebApplicationCreateRequest(projectID string, in normalizedWebApplicatio
 			},
 		},
 	}
+}
+
+func newWebApplicationUpdateRequest(projectID, applicationID string, in normalizedWebApplicationInput) *appV2.UpdateApplicationRequest {
+	applicationType := appV2.OIDCApplicationType_OIDC_APP_TYPE_WEB
+	authMethodType := appV2.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE
+	version := appV2.OIDCVersion_OIDC_VERSION_1_0
+	developmentMode := in.devMode
+	accessTokenType := appV2.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER
+	assertionDisabled := false
+	return &appV2.UpdateApplicationRequest{
+		ApplicationId: applicationID,
+		ProjectId:     projectID,
+		Name:          in.name,
+		ApplicationType: &appV2.UpdateApplicationRequest_OidcConfiguration{
+			OidcConfiguration: &appV2.UpdateOIDCApplicationConfigurationRequest{
+				RedirectUris:             append([]string(nil), in.redirectURIs...),
+				ResponseTypes:            []appV2.OIDCResponseType{appV2.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE},
+				GrantTypes:               webApplicationGrantTypes(in.enableRefreshTokens),
+				ApplicationType:          &applicationType,
+				AuthMethodType:           &authMethodType,
+				PostLogoutRedirectUris:   append([]string(nil), in.postLogoutRedirectURIs...),
+				Version:                  &version,
+				DevelopmentMode:          &developmentMode,
+				AccessTokenType:          &accessTokenType,
+				AccessTokenRoleAssertion: &assertionDisabled,
+				IdTokenRoleAssertion:     &assertionDisabled,
+				IdTokenUserinfoAssertion: &assertionDisabled,
+			},
+		},
+	}
+}
+
+func webApplicationMatches(actual *appV2.OIDCConfiguration, desired normalizedWebApplicationInput) bool {
+	return sameMembers(actual.GetRedirectUris(), desired.redirectURIs) &&
+		sameMembers(actual.GetResponseTypes(), []appV2.OIDCResponseType{appV2.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE}) &&
+		sameMembers(actual.GetGrantTypes(), webApplicationGrantTypes(desired.enableRefreshTokens)) &&
+		actual.GetApplicationType() == appV2.OIDCApplicationType_OIDC_APP_TYPE_WEB &&
+		actual.GetAuthMethodType() == appV2.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE &&
+		sameMembers(actual.GetPostLogoutRedirectUris(), desired.postLogoutRedirectURIs) &&
+		actual.GetVersion() == appV2.OIDCVersion_OIDC_VERSION_1_0 &&
+		actual.GetDevelopmentMode() == desired.devMode &&
+		actual.GetAccessTokenType() == appV2.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER &&
+		!actual.GetAccessTokenRoleAssertion() &&
+		!actual.GetIdTokenRoleAssertion() &&
+		!actual.GetIdTokenUserinfoAssertion()
+}
+
+func webApplicationGrantTypes(enableRefreshTokens bool) []appV2.OIDCGrantType {
+	grantTypes := []appV2.OIDCGrantType{appV2.OIDCGrantType_OIDC_GRANT_TYPE_AUTHORIZATION_CODE}
+	if enableRefreshTokens {
+		grantTypes = append(grantTypes, appV2.OIDCGrantType_OIDC_GRANT_TYPE_REFRESH_TOKEN)
+	}
+	return grantTypes
+}
+
+func sameMembers[T comparable](left, right []T) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[T]int, len(left))
+	for _, value := range left {
+		counts[value]++
+	}
+	for _, value := range right {
+		if counts[value] == 0 {
+			return false
+		}
+		counts[value]--
+	}
+	return true
 }

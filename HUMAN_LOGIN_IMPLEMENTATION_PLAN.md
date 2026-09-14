@@ -18,13 +18,13 @@ does not itself build the browser UI.
 | Done | ZGA-03 | `06f8c3f Add explicit human password reset` | Adds an operator-only password reset that never resets a password implicitly. |
 | Done | ZGA-04 | `a12e4b4 Add admin API test seam` | Makes Zitadel admin calls replaceable in unit tests without changing public behavior. |
 | Done | ZGA-05 | `5dad47e Harden Zitadel resource lookups` | Replaces first-page scans with exact, pagination-safe user and application lookups. |
-| Done | ZGA-06 | `Validate PKCE web application input` | Defines the Web/OIDC input and enforces strict redirect URI and security-profile rules. |
-| Planned | ZGA-07 | `Reconcile PKCE web applications` | Creates, reuses, or updates the exact OIDC application configuration and rejects type collisions. |
+| Done | ZGA-06 | `61c627d Validate PKCE web application input` | Defines the Web/OIDC input and enforces strict redirect URI and security-profile rules. |
+| Done | ZGA-07 | `Reconcile PKCE web applications` | Creates, reuses, or updates the exact OIDC application configuration and rejects type collisions. |
 | Planned | ZGA-08 | `Add human auth configuration verification` | Reports drift in human type/state, grants, metadata, and OIDC application configuration. |
 | Planned | ZGA-09 | `Test human provisioning with Zitadel` | Proves create, repeat, drift repair, collision, and password reset behavior against live Zitadel. |
 | Planned | ZGA-10 | `Document human authentication APIs` | Adds public package examples and the supported PKCE integration contract to the README. |
 
-Current count: **6 of 10 commits complete; 4 remain**. Commit count is not an
+Current count: **7 of 10 commits complete; 3 remain**. Commit count is not an
 effort percentage: OIDC reconciliation and verification are larger than the
 completed validation commits.
 
@@ -231,7 +231,7 @@ production input.
 Acceptance includes table-driven negative tests for every rejected URI class
 and pure request-shape tests for the fixed security profile.
 
-### ZGA-07 — Web/OIDC application reconciliation — Planned
+### ZGA-07 — Web/OIDC application reconciliation — Done
 
 Commit message: `Reconcile PKCE web applications`
 
