@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	appV1 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/app"
 	appV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/application/v2"
+	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/management"
 	projV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/project/v2"
 	"google.golang.org/grpc"
 )
@@ -38,6 +40,15 @@ type webProjectServiceFake struct {
 	projectService
 }
 
+type webApplicationManagementFake struct {
+	managementService
+	update func(context.Context, *management.UpdateOIDCAppConfigRequest) (*management.UpdateOIDCAppConfigResponse, error)
+}
+
+func (f *webApplicationManagementFake) UpdateOIDCAppConfig(ctx context.Context, in *management.UpdateOIDCAppConfigRequest, _ ...grpc.CallOption) (*management.UpdateOIDCAppConfigResponse, error) {
+	return f.update(ctx, in)
+}
+
 func (f *webProjectServiceFake) ListProjects(context.Context, *projV2.ListProjectsRequest, ...grpc.CallOption) (*projV2.ListProjectsResponse, error) {
 	return &projV2.ListProjectsResponse{Projects: []*projV2.Project{{ProjectId: "project-1", OrganizationId: "org-1", Name: "citius"}}}, nil
 }
@@ -63,7 +74,7 @@ func TestEnsureWebApplicationCreatesMissingApplication(t *testing.T) {
 			return nil, nil
 		},
 	}
-	client := newWebApplicationTestClient(applications, slog.New(slog.NewTextHandler(&logs, nil)))
+	client := newWebApplicationTestClient(t, applications, nil, slog.New(slog.NewTextHandler(&logs, nil)))
 
 	result, err := client.EnsureWebApplication(context.Background(), validWebApplicationInput())
 	if err != nil {
@@ -99,7 +110,7 @@ func TestEnsureWebApplicationLeavesEquivalentApplicationUnchanged(t *testing.T) 
 			return nil, nil
 		},
 	}
-	client := newWebApplicationTestClient(applications, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	client := newWebApplicationTestClient(t, applications, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	result, err := client.EnsureWebApplication(context.Background(), in)
 	if err != nil {
@@ -112,7 +123,7 @@ func TestEnsureWebApplicationLeavesEquivalentApplicationUnchanged(t *testing.T) 
 
 func TestEnsureWebApplicationReconcilesDrift(t *testing.T) {
 	in := validWebApplicationInput()
-	var updateRequest *appV2.UpdateApplicationRequest
+	var updateRequest *management.UpdateOIDCAppConfigRequest
 	existing := matchingWebApplication(t, in)
 	existing.Configuration = &appV2.Application_OidcConfiguration{OidcConfiguration: &appV2.OIDCConfiguration{
 		ClientId:                 "client-1",
@@ -137,11 +148,17 @@ func TestEnsureWebApplicationReconcilesDrift(t *testing.T) {
 			return nil, nil
 		},
 		update: func(_ context.Context, in *appV2.UpdateApplicationRequest) (*appV2.UpdateApplicationResponse, error) {
-			updateRequest = in
-			return &appV2.UpdateApplicationResponse{}, nil
+			t.Fatal("ApplicationServiceV2.UpdateApplication must not be called while reconciling")
+			return nil, nil
 		},
 	}
-	client := newWebApplicationTestClient(applications, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	managementService := &webApplicationManagementFake{
+		update: func(_ context.Context, in *management.UpdateOIDCAppConfigRequest) (*management.UpdateOIDCAppConfigResponse, error) {
+			updateRequest = in
+			return &management.UpdateOIDCAppConfigResponse{}, nil
+		},
+	}
+	client := newWebApplicationTestClient(t, applications, managementService, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	result, err := client.EnsureWebApplication(context.Background(), in)
 	if err != nil {
@@ -193,7 +210,7 @@ func TestEnsureWebApplicationRejectsTypeCollision(t *testing.T) {
 					return nil, nil
 				},
 			}
-			client := newWebApplicationTestClient(applications, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			client := newWebApplicationTestClient(t, applications, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 			result, err := client.EnsureWebApplication(context.Background(), validWebApplicationInput())
 			if result != nil || !errors.Is(err, ErrApplicationTypeMismatch) {
@@ -203,11 +220,19 @@ func TestEnsureWebApplicationRejectsTypeCollision(t *testing.T) {
 	}
 }
 
-func newWebApplicationTestClient(applications applicationService, logger *slog.Logger) *Client {
+func newWebApplicationTestClient(t *testing.T, applications applicationService, managementAPI managementService, logger *slog.Logger) *Client {
+	t.Helper()
+	if managementAPI == nil {
+		managementAPI = &webApplicationManagementFake{update: func(context.Context, *management.UpdateOIDCAppConfigRequest) (*management.UpdateOIDCAppConfigResponse, error) {
+			t.Fatal("UpdateOIDCAppConfig must not be called")
+			return nil, nil
+		}}
+	}
 	return &Client{
 		api: adminServices{
 			projects:     &webProjectServiceFake{},
 			applications: applications,
+			management:   managementAPI,
 		},
 		cfg:    Config{OrgID: "org-1", ProjectID: "project-1"},
 		logger: logger,
@@ -255,29 +280,25 @@ func matchingWebApplication(t *testing.T, in WebApplicationInput) *appV2.Applica
 	}
 }
 
-func assertWebApplicationUpdateRequest(t *testing.T, request *appV2.UpdateApplicationRequest, in WebApplicationInput) {
+func assertWebApplicationUpdateRequest(t *testing.T, request *management.UpdateOIDCAppConfigRequest, in WebApplicationInput) {
 	t.Helper()
-	if request == nil || request.GetApplicationId() != "app-1" || request.GetProjectId() != "project-1" || request.GetName() != "Citius Workbench" {
+	if request == nil || request.GetAppId() != "app-1" || request.GetProjectId() != "project-1" {
 		t.Fatalf("unexpected update identity: %+v", request)
 	}
 	normalized, err := normalizeWebApplicationInput(in)
 	if err != nil {
 		t.Fatalf("normalizeWebApplicationInput: %v", err)
 	}
-	oidc := request.GetOidcConfiguration()
-	if oidc == nil || !reflect.DeepEqual(oidc.GetRedirectUris(), normalized.redirectURIs) || !reflect.DeepEqual(oidc.GetPostLogoutRedirectUris(), normalized.postLogoutRedirectURIs) {
-		t.Fatalf("unexpected update URI sets: %+v", oidc)
+	if !reflect.DeepEqual(request.GetRedirectUris(), normalized.redirectURIs) || !reflect.DeepEqual(request.GetPostLogoutRedirectUris(), normalized.postLogoutRedirectURIs) {
+		t.Fatalf("unexpected update URI sets: %+v", request)
 	}
-	if !reflect.DeepEqual(oidc.GetResponseTypes(), []appV2.OIDCResponseType{appV2.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE}) || !reflect.DeepEqual(oidc.GetGrantTypes(), webApplicationGrantTypes(true)) {
-		t.Fatalf("unexpected update flow: %+v", oidc)
+	if !reflect.DeepEqual(request.GetResponseTypes(), []appV1.OIDCResponseType{appV1.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE}) || !reflect.DeepEqual(request.GetGrantTypes(), []appV1.OIDCGrantType{appV1.OIDCGrantType_OIDC_GRANT_TYPE_AUTHORIZATION_CODE, appV1.OIDCGrantType_OIDC_GRANT_TYPE_REFRESH_TOKEN}) {
+		t.Fatalf("unexpected update flow: %+v", request)
 	}
-	if oidc.GetApplicationType() != appV2.OIDCApplicationType_OIDC_APP_TYPE_WEB || oidc.GetAuthMethodType() != appV2.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE || oidc.GetVersion() != appV2.OIDCVersion_OIDC_VERSION_1_0 || oidc.GetAccessTokenType() != appV2.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER {
-		t.Fatalf("unexpected update security profile: %+v", oidc)
+	if request.GetAppType() != appV1.OIDCAppType_OIDC_APP_TYPE_WEB || request.GetAuthMethodType() != appV1.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE || request.GetAccessTokenType() != appV1.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER {
+		t.Fatalf("unexpected update security profile: %+v", request)
 	}
-	if oidc.ApplicationType == nil || oidc.AuthMethodType == nil || oidc.Version == nil || oidc.DevelopmentMode == nil || oidc.AccessTokenType == nil || oidc.AccessTokenRoleAssertion == nil || oidc.IdTokenRoleAssertion == nil || oidc.IdTokenUserinfoAssertion == nil {
-		t.Fatal("update must explicitly own every security-profile field")
-	}
-	if oidc.GetDevelopmentMode() || oidc.GetAccessTokenRoleAssertion() || oidc.GetIdTokenRoleAssertion() || oidc.GetIdTokenUserinfoAssertion() {
-		t.Fatalf("unexpected enabled update option: %+v", oidc)
+	if request.GetDevMode() || request.GetAccessTokenRoleAssertion() || request.GetIdTokenRoleAssertion() || request.GetIdTokenUserinfoAssertion() {
+		t.Fatalf("unexpected enabled update option: %+v", request)
 	}
 }

@@ -47,6 +47,7 @@ type authorizationService interface {
 }
 
 type managementService interface {
+	UpdateOIDCAppConfig(context.Context, *management.UpdateOIDCAppConfigRequest, ...grpc.CallOption) (*management.UpdateOIDCAppConfigResponse, error)
 	ListActions(context.Context, *management.ListActionsRequest, ...grpc.CallOption) (*management.ListActionsResponse, error)
 	CreateAction(context.Context, *management.CreateActionRequest, ...grpc.CallOption) (*management.CreateActionResponse, error)
 	UpdateAction(context.Context, *management.UpdateActionRequest, ...grpc.CallOption) (*management.UpdateActionResponse, error)

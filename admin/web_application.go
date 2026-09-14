@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	appV1 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/app"
 	appV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/application/v2"
+	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/management"
 )
 
 type normalizedWebApplicationInput struct {
@@ -56,7 +58,7 @@ func (c *Client) EnsureWebApplication(ctx context.Context, in WebApplicationInpu
 	}
 	result := &WebApplicationResult{ApplicationID: app.GetApplicationId(), ClientID: oidc.GetClientId()}
 	if !webApplicationMatches(oidc, normalized) {
-		if _, err := c.api.applications.UpdateApplication(ctx, newWebApplicationUpdateRequest(project.GetProjectId(), app.GetApplicationId(), normalized)); err != nil {
+		if _, err := c.api.management.UpdateOIDCAppConfig(ctx, newWebApplicationUpdateRequest(project.GetProjectId(), app.GetApplicationId(), normalized)); err != nil {
 			return nil, fmt.Errorf("admin.EnsureWebApplication: update application: %w", err)
 		}
 		result.Updated = true
@@ -191,33 +193,25 @@ func newWebApplicationCreateRequest(projectID string, in normalizedWebApplicatio
 	}
 }
 
-func newWebApplicationUpdateRequest(projectID, applicationID string, in normalizedWebApplicationInput) *appV2.UpdateApplicationRequest {
-	applicationType := appV2.OIDCApplicationType_OIDC_APP_TYPE_WEB
-	authMethodType := appV2.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE
-	version := appV2.OIDCVersion_OIDC_VERSION_1_0
-	developmentMode := in.devMode
-	accessTokenType := appV2.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER
-	assertionDisabled := false
-	return &appV2.UpdateApplicationRequest{
-		ApplicationId: applicationID,
-		ProjectId:     projectID,
-		Name:          in.name,
-		ApplicationType: &appV2.UpdateApplicationRequest_OidcConfiguration{
-			OidcConfiguration: &appV2.UpdateOIDCApplicationConfigurationRequest{
-				RedirectUris:             append([]string(nil), in.redirectURIs...),
-				ResponseTypes:            []appV2.OIDCResponseType{appV2.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE},
-				GrantTypes:               webApplicationGrantTypes(in.enableRefreshTokens),
-				ApplicationType:          &applicationType,
-				AuthMethodType:           &authMethodType,
-				PostLogoutRedirectUris:   append([]string(nil), in.postLogoutRedirectURIs...),
-				Version:                  &version,
-				DevelopmentMode:          &developmentMode,
-				AccessTokenType:          &accessTokenType,
-				AccessTokenRoleAssertion: &assertionDisabled,
-				IdTokenRoleAssertion:     &assertionDisabled,
-				IdTokenUserinfoAssertion: &assertionDisabled,
-			},
-		},
+func newWebApplicationUpdateRequest(projectID, applicationID string, in normalizedWebApplicationInput) *management.UpdateOIDCAppConfigRequest {
+	grantTypes := []appV1.OIDCGrantType{appV1.OIDCGrantType_OIDC_GRANT_TYPE_AUTHORIZATION_CODE}
+	if in.enableRefreshTokens {
+		grantTypes = append(grantTypes, appV1.OIDCGrantType_OIDC_GRANT_TYPE_REFRESH_TOKEN)
+	}
+	return &management.UpdateOIDCAppConfigRequest{
+		ProjectId:                projectID,
+		AppId:                    applicationID,
+		RedirectUris:             append([]string(nil), in.redirectURIs...),
+		ResponseTypes:            []appV1.OIDCResponseType{appV1.OIDCResponseType_OIDC_RESPONSE_TYPE_CODE},
+		GrantTypes:               grantTypes,
+		AppType:                  appV1.OIDCAppType_OIDC_APP_TYPE_WEB,
+		AuthMethodType:           appV1.OIDCAuthMethodType_OIDC_AUTH_METHOD_TYPE_NONE,
+		PostLogoutRedirectUris:   append([]string(nil), in.postLogoutRedirectURIs...),
+		DevMode:                  in.devMode,
+		AccessTokenType:          appV1.OIDCTokenType_OIDC_TOKEN_TYPE_BEARER,
+		AccessTokenRoleAssertion: false,
+		IdTokenRoleAssertion:     false,
+		IdTokenUserinfoAssertion: false,
 	}
 }
 
