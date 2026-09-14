@@ -42,7 +42,7 @@ func (c *Client) Onboard(ctx context.Context, in OnboardInput) (*OnboardResult, 
 
 	result := &OnboardResult{UserID: user.GetUserId(), ClientID: user.GetPreferredLoginName()}
 	if created {
-		secretResp, err := c.api.UserServiceV2().AddSecret(ctx, &userV2.AddSecretRequest{UserId: user.GetUserId()})
+		secretResp, err := c.api.users.AddSecret(ctx, &userV2.AddSecretRequest{UserId: user.GetUserId()})
 		if err != nil {
 			return nil, fmt.Errorf("admin.Onboard: mint client secret: %w", err)
 		}
@@ -66,7 +66,7 @@ func (c *Client) ensureMachineUser(ctx context.Context, orgID string, in Onboard
 	// page this lookup must be replaced with a server-side filter on
 	// username. Tracked as a follow-up; safe for the bootstrap-sized
 	// orgs this admin package targets today.
-	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
 	if err != nil {
 		return nil, false, err
 	}
@@ -81,7 +81,7 @@ func (c *Client) ensureMachineUser(ctx context.Context, orgID string, in Onboard
 		displayName = in.Username
 	}
 	description := fmt.Sprintf("managed by zitadel-grpc-auth admin for %s", displayName)
-	created, err := c.api.UserServiceV2().CreateUser(ctx, &userV2.CreateUserRequest{
+	created, err := c.api.users.CreateUser(ctx, &userV2.CreateUserRequest{
 		OrganizationId: orgID,
 		Username:       strPtr(in.Username),
 		UserType: &userV2.CreateUserRequest_Machine_{
@@ -95,7 +95,7 @@ func (c *Client) ensureMachineUser(ctx context.Context, orgID string, in Onboard
 	if err != nil {
 		return nil, false, err
 	}
-	got, err := c.api.UserServiceV2().GetUserByID(ctx, &userV2.GetUserByIDRequest{UserId: created.GetId()})
+	got, err := c.api.users.GetUserByID(ctx, &userV2.GetUserByIDRequest{UserId: created.GetId()})
 	if err != nil {
 		return nil, false, err
 	}
@@ -104,7 +104,7 @@ func (c *Client) ensureMachineUser(ctx context.Context, orgID string, in Onboard
 
 func (c *Client) reconcileAuthorizations(ctx context.Context, orgID, projectID, userID string, permissions []string) error {
 	desired := normalizeSortedStrings(permissions)
-	listed, err := c.api.AuthorizationServiceV2().ListAuthorizations(ctx, &authzV2.ListAuthorizationsRequest{})
+	listed, err := c.api.authorizations.ListAuthorizations(ctx, &authzV2.ListAuthorizationsRequest{})
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (c *Client) reconcileAuthorizations(ctx context.Context, orgID, projectID, 
 		return nil
 	}
 	for _, authz := range matching {
-		_, err := c.api.AuthorizationServiceV2().DeleteAuthorization(ctx, &authzV2.DeleteAuthorizationRequest{Id: authz.GetId()})
+		_, err := c.api.authorizations.DeleteAuthorization(ctx, &authzV2.DeleteAuthorizationRequest{Id: authz.GetId()})
 		if err != nil && !isStatusCode(err, codes.NotFound) {
 			return err
 		}
@@ -133,7 +133,7 @@ func (c *Client) reconcileAuthorizations(ctx context.Context, orgID, projectID, 
 	if len(desired) == 0 {
 		return nil
 	}
-	_, err = c.api.AuthorizationServiceV2().CreateAuthorization(ctx, &authzV2.CreateAuthorizationRequest{
+	_, err = c.api.authorizations.CreateAuthorization(ctx, &authzV2.CreateAuthorizationRequest{
 		OrganizationId: orgID,
 		UserId:         userID,
 		ProjectId:      projectID,
@@ -168,13 +168,13 @@ func (c *Client) reconcileMetadata(ctx context.Context, userID string, keyAccess
 	}
 
 	if len(toSet) > 0 {
-		_, err := c.api.UserServiceV2().SetUserMetadata(ctx, &userV2.SetUserMetadataRequest{UserId: userID, Metadata: toSet})
+		_, err := c.api.users.SetUserMetadata(ctx, &userV2.SetUserMetadataRequest{UserId: userID, Metadata: toSet})
 		if err != nil {
 			return err
 		}
 	}
 	if len(toDelete) > 0 {
-		_, err := c.api.UserServiceV2().DeleteUserMetadata(ctx, &userV2.DeleteUserMetadataRequest{UserId: userID, Keys: toDelete})
+		_, err := c.api.users.DeleteUserMetadata(ctx, &userV2.DeleteUserMetadataRequest{UserId: userID, Keys: toDelete})
 		if err != nil && !isStatusCode(err, codes.NotFound) {
 			return err
 		}
@@ -186,7 +186,7 @@ func (c *Client) resolveOrgID(ctx context.Context) (string, error) {
 	if strings.TrimSpace(c.cfg.OrgID) != "" {
 		return c.cfg.OrgID, nil
 	}
-	resp, err := c.api.OrganizationServiceV2().ListOrganizations(ctx, nil)
+	resp, err := c.api.organizations.ListOrganizations(ctx, nil)
 	if err != nil {
 		return "", err
 	}
@@ -201,7 +201,7 @@ func (c *Client) resolveProject(ctx context.Context) (*projV2.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	projects, err := c.api.ProjectServiceV2().ListProjects(ctx, &projV2.ListProjectsRequest{})
+	projects, err := c.api.projects.ListProjects(ctx, &projV2.ListProjectsRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (c *Client) resolveProject(ctx context.Context) (*projV2.Project, error) {
 }
 
 func (c *Client) findProjectByName(ctx context.Context, orgID, projectName string) (*projV2.Project, error) {
-	resp, err := c.api.ProjectServiceV2().ListProjects(ctx, &projV2.ListProjectsRequest{})
+	resp, err := c.api.projects.ListProjects(ctx, &projV2.ListProjectsRequest{})
 	if err != nil {
 		return nil, err
 	}

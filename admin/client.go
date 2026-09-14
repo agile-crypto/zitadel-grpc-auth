@@ -53,12 +53,24 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("admin.NewClient: %w", err)
 	}
 
-	return &Client{api: api, cfg: cfg, logger: logger}, nil
+	return &Client{
+		api: adminServices{
+			organizations:  api.OrganizationServiceV2(),
+			projects:       api.ProjectServiceV2(),
+			applications:   api.ApplicationServiceV2(),
+			users:          api.UserServiceV2(),
+			authorizations: api.AuthorizationServiceV2(),
+			management:     api.ManagementService(),
+			close:          api.Close,
+		},
+		cfg:    cfg,
+		logger: logger,
+	}, nil
 }
 
 func (c *Client) Close() error {
-	if c == nil || c.api == nil {
+	if c == nil || c.api.close == nil {
 		return nil
 	}
-	return c.api.Close()
+	return c.api.close()
 }

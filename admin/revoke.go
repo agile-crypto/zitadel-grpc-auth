@@ -23,7 +23,7 @@ func (c *Client) Revoke(ctx context.Context, username string, mode RevokeMode) e
 		return nil
 	}
 
-	listed, err := c.api.AuthorizationServiceV2().ListAuthorizations(ctx, &authzV2.ListAuthorizationsRequest{})
+	listed, err := c.api.authorizations.ListAuthorizations(ctx, &authzV2.ListAuthorizationsRequest{})
 	if err != nil {
 		return fmt.Errorf("admin.Revoke: list authorizations: %w", err)
 	}
@@ -31,14 +31,14 @@ func (c *Client) Revoke(ctx context.Context, username string, mode RevokeMode) e
 		if authz.GetUser().GetId() != user.GetUserId() {
 			continue
 		}
-		_, err := c.api.AuthorizationServiceV2().DeleteAuthorization(ctx, &authzV2.DeleteAuthorizationRequest{Id: authz.GetId()})
+		_, err := c.api.authorizations.DeleteAuthorization(ctx, &authzV2.DeleteAuthorizationRequest{Id: authz.GetId()})
 		if err != nil && !isStatusCode(err, codes.NotFound) {
 			return fmt.Errorf("admin.Revoke: delete authorization %s: %w", authz.GetId(), err)
 		}
 	}
 
 	namespace := normalizeNamespace("", c.cfg.Namespace)
-	_, err = c.api.UserServiceV2().DeleteUserMetadata(ctx, &userV2.DeleteUserMetadataRequest{
+	_, err = c.api.users.DeleteUserMetadata(ctx, &userV2.DeleteUserMetadataRequest{
 		UserId: user.GetUserId(),
 		Keys:   []string{keyAccessMetadataKey(namespace), policyAccessMetadataKey(namespace)},
 	})
@@ -47,7 +47,7 @@ func (c *Client) Revoke(ctx context.Context, username string, mode RevokeMode) e
 	}
 
 	if mode == DeleteUser {
-		_, err = c.api.UserServiceV2().DeleteUser(ctx, &userV2.DeleteUserRequest{UserId: user.GetUserId()})
+		_, err = c.api.users.DeleteUser(ctx, &userV2.DeleteUserRequest{UserId: user.GetUserId()})
 		if err != nil && !isStatusCode(err, codes.NotFound) {
 			return fmt.Errorf("admin.Revoke: delete user: %w", err)
 		}
@@ -59,7 +59,7 @@ func (c *Client) lookupUserByUsername(ctx context.Context, username string) (*us
 	// NOTE: same single-page caveat as ensureMachineUser — see the
 	// comment there. For >1-page organisations this lookup needs a
 	// server-side username filter.
-	resp, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	resp, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
 	if err != nil {
 		return nil, err
 	}

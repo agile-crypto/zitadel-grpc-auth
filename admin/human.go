@@ -48,7 +48,7 @@ func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordIn
 		return err
 	}
 
-	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
 	if err != nil {
 		return fmt.Errorf("admin.ResetHumanPassword: list users: %w", err)
 	}
@@ -61,7 +61,7 @@ func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordIn
 		return fmt.Errorf("admin.ResetHumanPassword: %w: %q", ErrUserNotFound, username)
 	}
 
-	if _, err := c.api.UserServiceV2().SetPassword(ctx, newSetPasswordRequest(user.GetUserId(), in)); err != nil {
+	if _, err := c.api.users.SetPassword(ctx, newSetPasswordRequest(user.GetUserId(), in)); err != nil {
 		return fmt.Errorf("admin.ResetHumanPassword: set password: %w", err)
 	}
 	c.logger.Info("reset Zitadel human password", "username", username, "user_id", user.GetUserId(), "password_change_required", in.PasswordChangeRequired)
@@ -69,7 +69,7 @@ func (c *Client) ResetHumanPassword(ctx context.Context, in ResetHumanPasswordIn
 }
 
 func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnboardInput) (*userV2.User, bool, error) {
-	listed, err := c.api.UserServiceV2().ListUsers(ctx, &userV2.ListUsersRequest{})
+	listed, err := c.api.users.ListUsers(ctx, &userV2.ListUsersRequest{})
 	if err != nil {
 		return nil, false, err
 	}
@@ -81,11 +81,11 @@ func (c *Client) ensureHumanUser(ctx context.Context, orgID string, in HumanOnbo
 		return user, false, nil
 	}
 
-	created, err := c.api.UserServiceV2().CreateUser(ctx, newHumanCreateRequest(orgID, in))
+	created, err := c.api.users.CreateUser(ctx, newHumanCreateRequest(orgID, in))
 	if err != nil {
 		return nil, false, err
 	}
-	got, err := c.api.UserServiceV2().GetUserByID(ctx, &userV2.GetUserByIDRequest{UserId: created.GetId()})
+	got, err := c.api.users.GetUserByID(ctx, &userV2.GetUserByIDRequest{UserId: created.GetId()})
 	if err != nil {
 		return nil, false, err
 	}

@@ -16,7 +16,7 @@ does not itself build the browser UI.
 | Done | ZGA-01 | `6827c53 Add human onboarding input validation` | Defines and validates a human onboarding contract without mixing passwords with machine-user secrets. |
 | Done | ZGA-02 | `9c36400 Add human user onboarding` | Creates or reuses a human, rejects a machine-user collision, and reconciles grants and metadata. |
 | Done | ZGA-03 | `06f8c3f Add explicit human password reset` | Adds an operator-only password reset that never resets a password implicitly. |
-| Planned | ZGA-04 | `Add admin API test seam` | Makes Zitadel admin calls replaceable in unit tests without changing public behavior. |
+| Done | ZGA-04 | `Add admin API test seam` | Makes Zitadel admin calls replaceable in unit tests without changing public behavior. |
 | Planned | ZGA-05 | `Harden Zitadel resource lookups` | Replaces first-page scans with exact, pagination-safe user and application lookups. |
 | Planned | ZGA-06 | `Validate PKCE web application input` | Defines the Web/OIDC input and enforces strict redirect URI and security-profile rules. |
 | Planned | ZGA-07 | `Reconcile PKCE web applications` | Creates, reuses, or updates the exact OIDC application configuration and rejects type collisions. |
@@ -24,7 +24,7 @@ does not itself build the browser UI.
 | Planned | ZGA-09 | `Test human provisioning with Zitadel` | Proves create, repeat, drift repair, collision, and password reset behavior against live Zitadel. |
 | Planned | ZGA-10 | `Document human authentication APIs` | Adds public package examples and the supported PKCE integration contract to the README. |
 
-Current count: **3 of 10 commits complete; 7 remain**. Commit count is not an
+Current count: **4 of 10 commits complete; 6 remain**. Commit count is not an
 effort percentage: OIDC reconciliation and verification are larger than the
 completed validation commits.
 
@@ -174,7 +174,7 @@ Zitadel's `SetPassword`, supports the change-required flag, and returns
 
 The reset does not modify grants, metadata, profile, email, or applications.
 
-### ZGA-04 — Admin API test seam — Planned
+### ZGA-04 — Admin API test seam — Done
 
 Commit message: `Add admin API test seam`
 

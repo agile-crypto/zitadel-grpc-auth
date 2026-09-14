@@ -39,7 +39,7 @@ func (c *Client) Bootstrap(ctx context.Context, in BootstrapInput) (*BootstrapRe
 		return nil, fmt.Errorf("admin.Bootstrap: find project: %w", err)
 	}
 	if project == nil {
-		resp, err := c.api.ProjectServiceV2().CreateProject(ctx, &projV2.CreateProjectRequest{
+		resp, err := c.api.projects.CreateProject(ctx, &projV2.CreateProjectRequest{
 			OrganizationId:       orgID,
 			Name:                 in.ProjectName,
 			ProjectRoleAssertion: true,
@@ -56,7 +56,7 @@ func (c *Client) Bootstrap(ctx context.Context, in BootstrapInput) (*BootstrapRe
 		if displayName == "" {
 			displayName = op.Permission
 		}
-		_, err := c.api.ProjectServiceV2().AddProjectRole(ctx, &projV2.AddProjectRoleRequest{
+		_, err := c.api.projects.AddProjectRole(ctx, &projV2.AddProjectRoleRequest{
 			ProjectId:   project.GetProjectId(),
 			RoleKey:     op.Permission,
 			DisplayName: displayName,
@@ -84,7 +84,7 @@ func (c *Client) Bootstrap(ctx context.Context, in BootstrapInput) (*BootstrapRe
 	if err != nil {
 		return nil, fmt.Errorf("admin.Bootstrap: read trigger actions: %w", err)
 	}
-	_, err = c.api.ManagementService().SetTriggerActions(ctx, &management.SetTriggerActionsRequest{
+	_, err = c.api.management.SetTriggerActions(ctx, &management.SetTriggerActionsRequest{
 		FlowType:    "2",
 		TriggerType: "4",
 		ActionIds:   triggerActions,
@@ -120,7 +120,7 @@ func dedupeOperations(operations []Operation) []Operation {
 }
 
 func (c *Client) ensureAPIApplication(ctx context.Context, projectID, appName string) (AppCredentials, error) {
-	resp, err := c.api.ApplicationServiceV2().ListApplications(ctx, &appV2.ListApplicationsRequest{})
+	resp, err := c.api.applications.ListApplications(ctx, &appV2.ListApplicationsRequest{})
 	if err != nil {
 		return AppCredentials{}, err
 	}
@@ -131,7 +131,7 @@ func (c *Client) ensureAPIApplication(ctx context.Context, projectID, appName st
 		return AppCredentials{ClientID: app.GetApiConfiguration().GetClientId()}, nil
 	}
 
-	created, err := c.api.ApplicationServiceV2().CreateApplication(ctx, &appV2.CreateApplicationRequest{
+	created, err := c.api.applications.CreateApplication(ctx, &appV2.CreateApplicationRequest{
 		ProjectId: projectID,
 		Name:      appName,
 		ApplicationType: &appV2.CreateApplicationRequest_ApiConfiguration{
@@ -146,7 +146,7 @@ func (c *Client) ensureAPIApplication(ctx context.Context, projectID, appName st
 }
 
 func (c *Client) ensureAction(ctx context.Context, name, script string) (string, error) {
-	resp, err := c.api.ManagementService().ListActions(ctx, &management.ListActionsRequest{})
+	resp, err := c.api.management.ListActions(ctx, &management.ListActionsRequest{})
 	if err != nil {
 		return "", err
 	}
@@ -155,7 +155,7 @@ func (c *Client) ensureAction(ctx context.Context, name, script string) (string,
 			continue
 		}
 		if action.GetScript() != script {
-			_, err := c.api.ManagementService().UpdateAction(ctx, &management.UpdateActionRequest{
+			_, err := c.api.management.UpdateAction(ctx, &management.UpdateActionRequest{
 				Id:            action.GetId(),
 				Name:          name,
 				Script:        script,
@@ -169,7 +169,7 @@ func (c *Client) ensureAction(ctx context.Context, name, script string) (string,
 		return action.GetId(), nil
 	}
 
-	created, err := c.api.ManagementService().CreateAction(ctx, &management.CreateActionRequest{
+	created, err := c.api.management.CreateAction(ctx, &management.CreateActionRequest{
 		Name:          name,
 		Script:        script,
 		Timeout:       durationpb.New(10 * time.Second),
@@ -187,7 +187,7 @@ func (c *Client) ensureAction(ctx context.Context, name, script string) (string,
 // actions to the same trigger from having those silently dropped by our
 // idempotent re-bootstrap.
 func (c *Client) unionTriggerActions(ctx context.Context, flowType, triggerType, actionID string) ([]string, error) {
-	resp, err := c.api.ManagementService().GetFlow(ctx, &management.GetFlowRequest{Type: flowType})
+	resp, err := c.api.management.GetFlow(ctx, &management.GetFlowRequest{Type: flowType})
 	if err != nil {
 		// If the flow can't be read, fall back to wiring just our action;
 		// the SetTriggerActions call below will surface any real error.

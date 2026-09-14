@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-
-	sdkclient "github.com/zitadel/zitadel-go/v3/pkg/client"
 )
 
 type Config struct {
@@ -23,7 +21,7 @@ type Config struct {
 }
 
 type Client struct {
-	api    *sdkclient.Client
+	api    adminServices
 	cfg    Config
 	logger *slog.Logger
 }
