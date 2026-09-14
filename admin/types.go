@@ -59,6 +59,23 @@ type OnboardInput struct {
 	PolicyAccess PolicyAccess
 }
 
+// HumanOnboardInput describes an interactive user managed by Zitadel. It is
+// intentionally separate from OnboardInput so callers cannot accidentally use
+// a human password where a machine-user client secret is expected.
+type HumanOnboardInput struct {
+	Username               string
+	GivenName              string
+	FamilyName             string
+	DisplayName            string
+	Email                  string
+	InitialPassword        string
+	PasswordChangeRequired bool
+	EmailVerified          bool
+	Permissions            []string
+	KeyAccess              KeyAccess
+	PolicyAccess           PolicyAccess
+}
+
 type KeyAccess struct {
 	AllowedKeyPatterns []string
 	DenyKeyPatterns    []string
