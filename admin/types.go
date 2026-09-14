@@ -86,6 +86,24 @@ type ResetHumanPasswordInput struct {
 	PasswordChangeRequired bool
 }
 
+// WebApplicationInput declares the complete redirect URI configuration for a
+// public OIDC web client using Authorization Code with PKCE.
+type WebApplicationInput struct {
+	Name                   string
+	RedirectURIs           []string
+	PostLogoutRedirectURIs []string
+	EnableRefreshTokens    bool
+	DevMode                bool
+}
+
+// WebApplicationResult identifies a reconciled OIDC web application.
+type WebApplicationResult struct {
+	ApplicationID string
+	ClientID      string
+	Created       bool
+	Updated       bool
+}
+
 type KeyAccess struct {
 	AllowedKeyPatterns []string
 	DenyKeyPatterns    []string
