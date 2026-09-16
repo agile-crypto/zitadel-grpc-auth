@@ -10,6 +10,7 @@ import (
 	appV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/application/v2"
 	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/management"
 	projV2 "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/project/v2"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -84,7 +85,7 @@ func (c *Client) Bootstrap(ctx context.Context, in BootstrapInput) (*BootstrapRe
 	if err != nil {
 		return nil, fmt.Errorf("admin.Bootstrap: read trigger actions: %w", err)
 	}
-	_, err = c.api.management.SetTriggerActions(ctx, &management.SetTriggerActionsRequest{
+	err = setTriggerActions(ctx, c.api.management, &management.SetTriggerActionsRequest{
 		FlowType:    "2",
 		TriggerType: "4",
 		ActionIds:   triggerActions,
@@ -216,4 +217,21 @@ func (c *Client) unionTriggerActions(ctx context.Context, flowType, triggerType,
 
 func isStatusCode(err error, code codes.Code) bool {
 	return status.Code(err) == code
+}
+
+type triggerActionSetter interface {
+	SetTriggerActions(context.Context, *management.SetTriggerActionsRequest, ...grpc.CallOption) (*management.SetTriggerActionsResponse, error)
+}
+
+func setTriggerActions(ctx context.Context, setter triggerActionSetter, request *management.SetTriggerActionsRequest) error {
+	_, err := setter.SetTriggerActions(ctx, request)
+	if err != nil && !isNoChangesStatus(err) {
+		return err
+	}
+	return nil
+}
+
+func isNoChangesStatus(err error) bool {
+	return status.Code(err) == codes.FailedPrecondition &&
+		strings.HasPrefix(status.Convert(err).Message(), "No Changes")
 }
